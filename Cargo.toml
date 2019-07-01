@@ -6,7 +6,7 @@ edition = "2018"
 description = "A file abstraction system for Rust"
 repository = "https://github.com/bnjjj/chicon-rs"
 readme = "README.md"
-keywords = ["fs", "filesystem", "file", "directory", "ssh", "scp", "s3", "os", "abstraction"]
+keywords = ["fs", "filesystem", "file", "directory", "s3"]
 license-file = "LICENSE"
 categories = ["filesystem", "development-tools", "api-bindings"]
 
