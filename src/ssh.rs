@@ -480,8 +480,8 @@ mod tests {
             env::var("SSH_PUBLIC_KEY").expect("SSH_PRIVATE_KEY environment variable must be set"),
         );
 
-        ssh_fs.create_dir("share/testcreatetest").unwrap();
-        ssh_fs.remove_dir("share/testcreatetest").unwrap();
+        ssh_fs.create_dir("share/testsshcreatetest").unwrap();
+        ssh_fs.remove_dir("share/testsshcreatetest").unwrap();
     }
 
     #[test]
@@ -494,18 +494,22 @@ mod tests {
             env::var("SSH_PUBLIC_KEY").expect("SSH_PRIVATE_KEY environment variable must be set"),
         );
 
-        ssh_fs.create_dir("share/testreaddirtest").unwrap();
-        ssh_fs.create_file("share/testreaddirtest/myfile").unwrap();
+        ssh_fs.create_dir("share/testsshreaddirtest").unwrap();
+        ssh_fs
+            .create_file("share/testsshreaddirtest/myfile")
+            .unwrap();
 
-        let res = ssh_fs.read_dir("share/testreaddirtest").unwrap();
+        let res = ssh_fs.read_dir("share/testsshreaddirtest").unwrap();
         assert_eq!(1, res.len());
         assert_eq!(
-            PathBuf::from(String::from("share/testreaddirtest/myfile")),
+            PathBuf::from(String::from("share/testsshreaddirtest/myfile")),
             res.get(0).unwrap().path().unwrap()
         );
 
-        ssh_fs.remove_file("share/testreaddirtest/myfile").unwrap();
-        ssh_fs.remove_dir("share/testreaddirtest").unwrap();
+        ssh_fs
+            .remove_file("share/testsshreaddirtest/myfile")
+            .unwrap();
+        ssh_fs.remove_dir("share/testsshreaddirtest").unwrap();
     }
 
     #[test]
@@ -519,17 +523,17 @@ mod tests {
         );
 
         let _res = ssh_fs.read_dir(".").unwrap();
-        ssh_fs.create_dir("share/testfulltest").unwrap();
-        ssh_fs.remove_dir("share/testfulltest").unwrap();
+        ssh_fs.create_dir("share/testsshfulltest").unwrap();
+        ssh_fs.remove_dir("share/testsshfulltest").unwrap();
 
-        let mut file_created = ssh_fs.create_file("share/testfull.test").unwrap();
+        let mut file_created = ssh_fs.create_file("share/testsshfull.test").unwrap();
         file_created.write_all(b"Coucou c'est moi").unwrap();
         file_created.sync_all().unwrap();
 
-        let mut file = ssh_fs.open_file("share/testfull.test").unwrap();
+        let mut file = ssh_fs.open_file("share/testsshfull.test").unwrap();
         let mut buffer = String::new();
         file.read_to_string(&mut buffer).unwrap();
-        ssh_fs.remove_file("share/testfull.test").unwrap();
+        ssh_fs.remove_file("share/testsshfull.test").unwrap();
     }
 
     #[test]
@@ -542,11 +546,11 @@ mod tests {
             env::var("SSH_PUBLIC_KEY").expect("SSH_PUBLIC_KEY environment variable must be set"),
         );
 
-        ssh_fs.create_dir("share/testremovedirtest").unwrap();
+        ssh_fs.create_dir("share/testsshremovedirtest").unwrap();
         ssh_fs
-            .create_file("share/testremovedirtest/myfile")
+            .create_file("share/testsshremovedirtest/myfile")
             .unwrap();
 
-        ssh_fs.remove_dir_all("share/testremovedirtest").unwrap();
+        ssh_fs.remove_dir_all("share/testsshremovedirtest").unwrap();
     }
 }
