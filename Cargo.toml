@@ -19,3 +19,5 @@ osauth = "0.2.4"
 futures = "0.1.28"
 serde = "1.0.94"
 chrono = { version = "0.4.7", features = ["serde"] }
+tokio = "0.1.22"
+env_logger = "0.6.2"

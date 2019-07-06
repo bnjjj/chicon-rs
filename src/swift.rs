@@ -1,15 +1,17 @@
 use std::env;
+use std::sync::Arc;
 use std::fs::Permissions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
-use url::percent_encoding::{utf8_percent_encode, SIMPLE_ENCODE_SET};
 
+use url::percent_encoding::{utf8_percent_encode, SIMPLE_ENCODE_SET};
 use serde::{Serialize, Deserialize};
 use futures::future::Future;
 use osauth::{
-    from_env, services::ObjectStorageService, services::OBJECT_STORAGE, Adapter, AuthType,
+    services::ObjectStorageService, services::OBJECT_STORAGE, Adapter, AuthType, request::send_checked
 };
+use tokio::runtime::Runtime;
 
 use crate::error::ChiconError;
 use crate::{DirEntry, File, FileSystem, FileType};
@@ -50,18 +52,20 @@ impl SwiftFileSystem {
         env::set_var("OS_PASSWORD", password);
         env::set_var("OS_PROJECT_NAME", project_name);
 
-        let adapter = from_env()?.into_adapter(OBJECT_STORAGE);
-        let container_query = ContainerQuery{};
-        adapter.post_json(&[&account, &container], container_query, None).wait()?;
+        let mut runtime = Runtime::new().expect("cannot create a tokio runtime");
+        let adapter = Adapter::from_env(OBJECT_STORAGE)?;
+
+        runtime.block_on(adapter.put_empty(vec![account.clone(), container.clone()], None))?;
 
         Ok(SwiftFileSystem { account, container, adapter })
     }
 
     /// Create a swift file system based on environment variable OS_*
     pub fn new_from_env(account: String, container: String) -> Result<Self, ChiconError> {
-        let adapter = from_env()?.into_adapter(OBJECT_STORAGE);
-        let container_query = ContainerQuery{};
-        adapter.post_json(&[&account, &container], container_query, None).wait()?;
+        let mut runtime = Runtime::new().expect("cannot create a tokio runtime");
+        let adapter = Adapter::from_env(OBJECT_STORAGE)?;
+
+        runtime.block_on(adapter.put_empty(vec![account.clone(), container.clone()], None))?;
 
         Ok(SwiftFileSystem { account, container, adapter })
     }
@@ -83,8 +87,9 @@ impl FileSystem for SwiftFileSystem {
             path.to_str().ok_or(ChiconError::BadPath)?,
             QUERY_ENCODE_SET,
         ).to_string();
-        let object_req = ObjectQuery {};
-        let object_res: Object = self.adapter.post_json(&[&self.account, &self.container, &object_path], object_req, None).wait()?;
+        self.adapter.put_empty(&[&self.account, &self.container, &object_path], None).wait()?;
+
+        Ok(SwiftFile::new(self.adapter.clone(), self.account.clone(), self.container.clone(), PathBuf::from(path)))
     }
     fn create_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
@@ -123,6 +128,7 @@ impl FileSystem for SwiftFileSystem {
 
 /// Structure implementing File trait to represent a file on a swift filesystem
 pub struct SwiftFile {
+    adapter: Adapter<ObjectStorageService>,
     account: String,
     container: String,
     filename: PathBuf,
@@ -130,8 +136,9 @@ pub struct SwiftFile {
     content: Vec<u8>
 }
 impl SwiftFile {
-    fn new(account: String, container: String, filename: PathBuf) -> Self {
+    fn new(adapter: Adapter<ObjectStorageService>, account: String, container: String, filename: PathBuf) -> Self {
         SwiftFile {
+            adapter,
             account,
             container,
             filename,
@@ -143,7 +150,15 @@ impl File for SwiftFile {
     type FSError = ChiconError;
 
     fn sync_all(&mut self) -> Result<(), Self::FSError> {
-        unimplemented!()
+        let object_path = utf8_percent_encode(
+            self.filename.to_str().ok_or(ChiconError::BadPath)?,
+            QUERY_ENCODE_SET,
+        ).to_string();
+        self.adapter.start_put(&[&self.account, &self.container, &object_path], None)
+            .map(|req_builder| req_builder.body(self.content.clone()))
+            .then(send_checked).wait()?;
+
+        Ok(())
     }
 }
 
@@ -178,17 +193,6 @@ impl DirEntry for SwiftDirEntry {
     }
 }
 
-// type Object struct {
-//     Name               string     `json:"name"`          // object name
-//     ContentType        string     `json:"content_type"`  // eg application/directory
-//     Bytes              int64      `json:"bytes"`         // size in bytes
-//     ServerLastModified string     `json:"last_modified"` // Last modified time, eg '2011-06-30T08:20:47.736680' as a string supplied by the server
-//     LastModified       time.Time  // Last modified time converted to a time.Time
-//     Hash               string     `json:"hash"` // MD5 hash, eg "d41d8cd98f00b204e9800998ecf8427e"
-//     PseudoDirectory    bool       // Set when using delimiter to show that this directory object does not really exist
-//     SubDir             string     `json:"subdir"` // returned only when using delimiter to mark "pseudo directories"
-//     ObjectType         ObjectType // type of this object
-// }
 #[derive(Serialize, Deserialize)]
 struct Object {
     name: String,
@@ -213,4 +217,27 @@ struct ContainerQuery {
     marker: String,
     end_marker: String,
     headers: HashMap<String, String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use env_logger;
+
+    #[test]
+    fn test_create_file() {
+        env_logger::init();
+        let swift_fs = SwiftFileSystem::new_from_env(String::from("AUTH_tenantid"), String::from("testbnj")).expect("cannot create swift filesystem");
+        // let mut file = swift_fs.create_file("test.test").unwrap();
+
+        // file.write_all(String::from("coucou").as_bytes()).unwrap();
+        // file.sync_all().unwrap();
+
+        // let mut content: String = String::new();
+        // file.read_to_string(&mut content).unwrap();
+        // assert_eq!(content, String::from("coucou"));
+
+        // swift_fs.remove_file("test.test").unwrap();
+    }
+
 }

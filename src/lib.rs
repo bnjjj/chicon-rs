@@ -126,6 +126,8 @@ extern crate url;
 extern crate osauth;
 extern crate serde;
 extern crate chrono;
+extern crate tokio;
+extern crate env_logger;
 
 mod error;
 mod os;
