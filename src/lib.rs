@@ -123,6 +123,9 @@ extern crate rusoto_s3;
 extern crate ssh2;
 #[macro_use]
 extern crate url;
+extern crate osauth;
+extern crate serde;
+extern crate chrono;
 
 mod error;
 mod os;

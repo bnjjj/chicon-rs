@@ -20,6 +20,7 @@ pub enum ChiconError {
     SSHError(ssh2::Error),
     SSHExecutionError(String),
     SFTPError,
+    OpenstackError(osauth::Error),
 }
 
 impl fmt::Debug for ChiconError {
@@ -52,6 +53,7 @@ impl fmt::Debug for ChiconError {
                 write!(f, "SSH execution error: {:?}", output)
             }
             ChiconError::SFTPError => write!(f, "SFTP error"),
+            ChiconError::OpenstackError(err) => write!(f, "Openstack error : {:?}", err),
         }
     }
 }
@@ -89,5 +91,10 @@ impl From<RusotoError<ListObjectsV2Error>> for ChiconError {
 impl From<ssh2::Error> for ChiconError {
     fn from(err: ssh2::Error) -> Self {
         ChiconError::SSHError(err)
+    }
+}
+impl From<osauth::Error> for ChiconError {
+    fn from(err: osauth::Error) -> Self {
+        ChiconError::OpenstackError(err)
     }
 }
