@@ -132,10 +132,11 @@ extern crate env_logger;
 mod error;
 mod os;
 mod s3;
-
 mod sftp;
 mod ssh;
-mod swift;
+mod mem;
+// mod swift;
+
 use std::fs::Permissions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
