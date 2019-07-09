@@ -107,7 +107,7 @@ impl<'a> FileSystem for SSHFileSystem<'a> {
         Ok(())
     }
 
-    fn create_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError> {
+    fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<Self::File, Self::FSError> {
         let path = path.as_ref();
         let ssh_session = SSHSession::new(
             self.addr.clone(),
@@ -141,7 +141,7 @@ impl<'a> FileSystem for SSHFileSystem<'a> {
         ))
     }
 
-    fn create_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
         let ssh_session = SSHSession::new(
             self.addr.clone(),
@@ -167,7 +167,7 @@ impl<'a> FileSystem for SSHFileSystem<'a> {
         Ok(())
     }
 
-    fn create_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn create_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
         let ssh_session = SSHSession::new(
             self.addr.clone(),
@@ -259,7 +259,7 @@ impl<'a> FileSystem for SSHFileSystem<'a> {
         Ok(entries)
     }
 
-    fn remove_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
         let ssh_session = SSHSession::new(
             self.addr.clone(),
@@ -285,11 +285,11 @@ impl<'a> FileSystem for SSHFileSystem<'a> {
         Ok(())
     }
 
-    fn remove_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         self.remove_dir_all(path)
     }
 
-    fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
         let ssh_session = SSHSession::new(
             self.addr.clone(),
@@ -315,7 +315,7 @@ impl<'a> FileSystem for SSHFileSystem<'a> {
         Ok(())
     }
 
-    fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Result<(), Self::FSError> {
+    fn rename<P: AsRef<Path>>(&mut self, from: P, to: P) -> Result<(), Self::FSError> {
         let from = from.as_ref();
         let to = to.as_ref();
         let ssh_session = SSHSession::new(
@@ -471,7 +471,7 @@ mod tests {
 
     #[test]
     fn test_create_dir() {
-        let ssh_fs = SSHFileSystem::new(
+        let mut ssh_fs = SSHFileSystem::new(
             String::from("127.0.0.1:22"),
             env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
             None,
@@ -485,7 +485,7 @@ mod tests {
 
     #[test]
     fn test_read_dir() {
-        let ssh_fs = SSHFileSystem::new(
+        let mut ssh_fs = SSHFileSystem::new(
             String::from("127.0.0.1:22"),
             env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
             None,
@@ -513,7 +513,7 @@ mod tests {
 
     #[test]
     fn test_full_flow() {
-        let ssh_fs = SSHFileSystem::new(
+        let mut ssh_fs = SSHFileSystem::new(
             String::from("127.0.0.1:22"),
             env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
             None,
@@ -537,7 +537,7 @@ mod tests {
 
     #[test]
     fn test_remove_dir_all() {
-        let ssh_fs = SSHFileSystem::new(
+        let mut ssh_fs = SSHFileSystem::new(
             String::from("127.0.0.1:22"),
             env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
             None,

@@ -1,4 +1,6 @@
 use std::fmt;
+use std::path::PathBuf;
+use std::cell::{BorrowError, BorrowMutError};
 
 use rusoto_core::RusotoError;
 use rusoto_s3::{
@@ -21,6 +23,10 @@ pub enum ChiconError {
     SSHExecutionError(String),
     SFTPError,
     OpenstackError(osauth::Error),
+    BorrowError(BorrowError),
+    BorrowMutError(BorrowMutError),
+    MemFileNotFound(PathBuf),
+    MemDirNotFound(PathBuf),
 }
 
 impl fmt::Debug for ChiconError {
@@ -54,6 +60,10 @@ impl fmt::Debug for ChiconError {
             }
             ChiconError::SFTPError => write!(f, "SFTP error"),
             ChiconError::OpenstackError(err) => write!(f, "Openstack error : {:?}", err),
+            ChiconError::BorrowError(err) => write!(f, "Borrow error : {:?}", err),
+            ChiconError::BorrowMutError(err) => write!(f, "Borrow mut error : {:?}", err),
+            ChiconError::MemFileNotFound(path) => write!(f, "Error memory file not found : {:?}", path),
+            ChiconError::MemDirNotFound(path) => write!(f, "Error memory directory not found : {:?}", path),
         }
     }
 }
@@ -96,5 +106,15 @@ impl From<ssh2::Error> for ChiconError {
 impl From<osauth::Error> for ChiconError {
     fn from(err: osauth::Error) -> Self {
         ChiconError::OpenstackError(err)
+    }
+}
+impl From<BorrowError> for ChiconError {
+    fn from(err: BorrowError) -> Self {
+        ChiconError::BorrowError(err)
+    }
+}
+impl From<BorrowMutError> for ChiconError {
+    fn from(err: BorrowMutError) -> Self {
+        ChiconError::BorrowMutError(err)
     }
 }

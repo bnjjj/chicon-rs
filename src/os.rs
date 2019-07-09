@@ -1,4 +1,4 @@
-use std::fs::{File, Permissions};
+use std::fs::{File, OpenOptions, Permissions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -21,20 +21,26 @@ impl FileSystem for OsFileSystem {
         std::fs::set_permissions(path, perm)
     }
 
-    fn create_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError> {
+    fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<Self::File, Self::FSError> {
         Ok(OsFile::from(File::create(path)?))
     }
 
-    fn create_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         std::fs::create_dir(path)
     }
 
-    fn create_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn create_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         std::fs::create_dir_all(path)
     }
 
     fn open_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError> {
-        Ok(OsFile::from(File::open(path)?))
+        Ok(OsFile::from(
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .append(true)
+                .open(path)?,
+        ))
     }
 
     fn read_dir<P: AsRef<Path>>(&self, path: P) -> Result<Vec<Self::DirEntry>, Self::FSError> {
@@ -42,19 +48,19 @@ impl FileSystem for OsFileSystem {
         Ok(read_dir.map(OsDirEntry::from).collect())
     }
 
-    fn remove_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         std::fs::remove_file(path)
     }
 
-    fn remove_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         std::fs::remove_dir(path)
     }
 
-    fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         std::fs::remove_dir_all(path)
     }
 
-    fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Result<(), Self::FSError> {
+    fn rename<P: AsRef<Path>>(&mut self, from: P, to: P) -> Result<(), Self::FSError> {
         std::fs::rename(from, to)
     }
 }
@@ -115,24 +121,34 @@ impl From<std::fs::DirEntry> for OsDirEntry {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_create_file() {
-        let os_fs = OsFileSystem::new();
-        os_fs.create_file("test.test").unwrap();
+        let mut os_fs = OsFileSystem::new();
+        {
+            let mut file = os_fs.create_file("test.test").unwrap();
 
-        assert!(std::fs::read("test.test").is_ok());
+            assert!(std::fs::read("test.test").is_ok());
 
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut new_file = os_fs.open_file("test.test").unwrap();
+        let mut content = String::new();
+        new_file.read_to_string(&mut content).unwrap();
+
+        assert_eq!(String::from("coucoutoi"), content);
         std::fs::remove_file("test.test").unwrap();
     }
 
     #[test]
     fn test_create_dir() {
-        let os_fs = OsFileSystem::new();
+        let mut os_fs = OsFileSystem::new();
         os_fs.create_dir("testdir").unwrap();
 
         assert!(std::fs::read_dir("testdir").is_ok());
@@ -142,7 +158,9 @@ mod tests {
 
     #[test]
     fn test_create_dir_all() {
-        let os_fs = OsFileSystem::new();
+        let mut os_fs = OsFileSystem::new();
+        os_fs.create_dir_all("testdirall/test").unwrap();
+        os_fs.create_file("testdirall/test/test.test").unwrap();
         os_fs.create_dir_all("testdirall/test").unwrap();
 
         assert!(std::fs::read_dir("testdirall/test").is_ok());
@@ -152,7 +170,7 @@ mod tests {
 
     #[test]
     fn test_read_dir() {
-        let os_fs = OsFileSystem::new();
+        let mut os_fs = OsFileSystem::new();
         os_fs.create_dir_all("testreaddir/test").unwrap();
         os_fs.create_file("testreaddir/mytest.test").unwrap();
 
@@ -170,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_read_dir_bis() {
-        let os_fs = OsFileSystem::new();
+        let mut os_fs = OsFileSystem::new();
         os_fs.create_dir_all("testreaddirbis/test").unwrap();
         os_fs
             .create_file("testreaddirbis/test/mytest.test")

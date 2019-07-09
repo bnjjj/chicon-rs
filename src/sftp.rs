@@ -1,14 +1,10 @@
-use std::net::TcpStream;
-use std::fs::{Permissions};
-use std::os::unix::fs::PermissionsExt;
+use std::fs::Permissions;
 use std::io::{Read, Write};
+use std::net::TcpStream;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use ssh2::{
-    Session,
-    FileStat,
-    OpenFlags,
-};
+use ssh2::{FileStat, OpenFlags, Session};
 
 use crate::error::ChiconError;
 use crate::{DirEntry, File as FsFile, FileSystem, FileType};
@@ -16,10 +12,16 @@ use crate::{DirEntry, File as FsFile, FileSystem, FileType};
 struct SSHSession {
     // Only usefull to not drop connection
     _tcp_stream: TcpStream,
-    session: Session
+    session: Session,
 }
 impl SSHSession {
-    fn new<P: AsRef<Path>>(addr: String, username: &str, passphrase: Option<&str>, private_key: P, public_key: P) -> Result<Self, ChiconError> {
+    fn new<P: AsRef<Path>>(
+        addr: String,
+        username: &str,
+        passphrase: Option<&str>,
+        private_key: P,
+        public_key: P,
+    ) -> Result<Self, ChiconError> {
         let private_key = private_key.as_ref();
         let public_key = public_key.as_ref();
 
@@ -28,7 +30,10 @@ impl SSHSession {
         session.handshake(&tcp_stream)?;
         session.userauth_pubkey_file(username, Some(public_key), private_key, passphrase)?;
 
-        Ok(SSHSession{_tcp_stream: tcp_stream, session})
+        Ok(SSHSession {
+            _tcp_stream: tcp_stream,
+            session,
+        })
     }
 
     fn session(&self) -> &Session {
@@ -45,11 +50,17 @@ pub struct SFTPFileSystem<'a> {
     public_key: PathBuf,
 }
 impl<'a> SFTPFileSystem<'a> {
-    pub fn new<P: AsRef<Path>>(addr: String, username: String, passphrase: Option<&'a str>, private_key: P, public_key: P) -> Self {
+    pub fn new<P: AsRef<Path>>(
+        addr: String,
+        username: String,
+        passphrase: Option<&'a str>,
+        private_key: P,
+        public_key: P,
+    ) -> Self {
         let private_key = private_key.as_ref();
         let public_key = public_key.as_ref();
 
-        SFTPFileSystem{
+        SFTPFileSystem {
             username,
             passphrase,
             private_key: PathBuf::from(private_key),
@@ -65,14 +76,20 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
 
     fn chmod<P: AsRef<Path>>(&self, path: P, perm: Permissions) -> Result<(), Self::FSError> {
         let path = path.as_ref();
-        let ssh_session = SSHSession::new(self.addr.clone(), &self.username, self.passphrase, self.private_key.as_path(), self.public_key.as_path())?;
+        let ssh_session = SSHSession::new(
+            self.addr.clone(),
+            &self.username,
+            self.passphrase,
+            self.private_key.as_path(),
+            self.public_key.as_path(),
+        )?;
         let session = ssh_session.session();
 
         let sftp = session.sftp()?;
         sftp.create(path)?;
 
         let file_stat = sftp.stat(path)?;
-        let stat = FileStat{
+        let stat = FileStat {
             perm: Some(perm.mode()),
             ..file_stat
         };
@@ -80,9 +97,15 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
         sftp.setstat(path, stat).map_err(ChiconError::from)
     }
 
-    fn create_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError> {
+    fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<Self::File, Self::FSError> {
         let path = path.as_ref();
-        let ssh_session = SSHSession::new(self.addr.clone(), &self.username, self.passphrase, self.private_key.as_path(), self.public_key.as_path())?;
+        let ssh_session = SSHSession::new(
+            self.addr.clone(),
+            &self.username,
+            self.passphrase,
+            self.private_key.as_path(),
+            self.public_key.as_path(),
+        )?;
         let session = ssh_session.session();
 
         let sftp = session.sftp()?;
@@ -95,25 +118,39 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
             self.username.clone(),
             self.passphrase,
             &self.private_key,
-            &self.public_key
+            &self.public_key,
         ))
     }
 
-    fn create_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
-        let ssh_session = SSHSession::new(self.addr.clone(), &self.username, self.passphrase, self.private_key.as_path(), self.public_key.as_path())?;
+    fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+        let ssh_session = SSHSession::new(
+            self.addr.clone(),
+            &self.username,
+            self.passphrase,
+            self.private_key.as_path(),
+            self.public_key.as_path(),
+        )?;
         let session = ssh_session.session();
 
         let sftp = session.sftp()?;
-        sftp.mkdir(path.as_ref(), 0o755).map(|_| ()).map_err(ChiconError::from)
+        sftp.mkdir(path.as_ref(), 0o755)
+            .map(|_| ())
+            .map_err(ChiconError::from)
     }
 
-    fn create_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn create_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         self.create_dir(path).map(|_| ()).map_err(ChiconError::from)
     }
 
     fn open_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError> {
         let path = path.as_ref();
-        let ssh_session = SSHSession::new(self.addr.clone(), &self.username, self.passphrase, self.private_key.as_path(), self.public_key.as_path())?;
+        let ssh_session = SSHSession::new(
+            self.addr.clone(),
+            &self.username,
+            self.passphrase,
+            self.private_key.as_path(),
+            self.public_key.as_path(),
+        )?;
         let session = ssh_session.session();
 
         let sftp = session.sftp()?;
@@ -122,7 +159,6 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
             let mut file = sftp.open(path)?;
             file.read_to_end(&mut content)?;
         }
-        
         Ok(SFTPFile::new(
             PathBuf::from(path),
             content,
@@ -130,12 +166,18 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
             self.username.clone(),
             self.passphrase,
             &self.private_key,
-            &self.public_key
+            &self.public_key,
         ))
     }
 
     fn read_dir<P: AsRef<Path>>(&self, path: P) -> Result<Vec<Self::DirEntry>, Self::FSError> {
-        let ssh_session = SSHSession::new(self.addr.clone(), &self.username, self.passphrase, self.private_key.as_path(), self.public_key.as_path())?;
+        let ssh_session = SSHSession::new(
+            self.addr.clone(),
+            &self.username,
+            self.passphrase,
+            self.private_key.as_path(),
+            self.public_key.as_path(),
+        )?;
         let session = ssh_session.session();
 
         let sftp = session.sftp().map_err(ChiconError::from)?;
@@ -144,23 +186,35 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
         Ok(dir_entries.into_iter().map(SFTPDirEntry::from).collect())
     }
 
-    fn remove_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
-        let ssh_session = SSHSession::new(self.addr.clone(), &self.username, self.passphrase, self.private_key.as_path(), self.public_key.as_path())?;
+    fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+        let ssh_session = SSHSession::new(
+            self.addr.clone(),
+            &self.username,
+            self.passphrase,
+            self.private_key.as_path(),
+            self.public_key.as_path(),
+        )?;
         let session = ssh_session.session();
 
         let sftp = session.sftp().map_err(ChiconError::from)?;
         sftp.unlink(path.as_ref()).map_err(ChiconError::from)
     }
 
-    fn remove_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
-        let ssh_session = SSHSession::new(self.addr.clone(), &self.username, self.passphrase, self.private_key.as_path(), self.public_key.as_path())?;
+    fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+        let ssh_session = SSHSession::new(
+            self.addr.clone(),
+            &self.username,
+            self.passphrase,
+            self.private_key.as_path(),
+            self.public_key.as_path(),
+        )?;
         let session = ssh_session.session();
         let sftp = session.sftp().map_err(ChiconError::from)?;
 
         sftp.rmdir(path.as_ref()).map_err(ChiconError::from)
     }
 
-    fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
 
         let dir_entries = self.read_dir(path)?;
@@ -174,12 +228,19 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
         self.remove_dir(path)
     }
 
-    fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Result<(), Self::FSError> {
-        let ssh_session = SSHSession::new(self.addr.clone(), &self.username, self.passphrase, self.private_key.as_path(), self.public_key.as_path())?;
+    fn rename<P: AsRef<Path>>(&mut self, from: P, to: P) -> Result<(), Self::FSError> {
+        let ssh_session = SSHSession::new(
+            self.addr.clone(),
+            &self.username,
+            self.passphrase,
+            self.private_key.as_path(),
+            self.public_key.as_path(),
+        )?;
         let session = ssh_session.session();
 
         let sftp = session.sftp().map_err(ChiconError::from)?;
-        sftp.rename(from.as_ref(), to.as_ref(), None).map_err(ChiconError::from)
+        sftp.rename(from.as_ref(), to.as_ref(), None)
+            .map_err(ChiconError::from)
     }
 }
 
@@ -194,11 +255,22 @@ pub struct SFTPFile<'a> {
     public_key: PathBuf,
 }
 impl<'a> SFTPFile<'a> {
-    fn new<P>(filename: PathBuf, content: Vec<u8>, addr: String, username: String, passphrase: Option<&'a str>, private_key: P, public_key: P) -> Self where P: AsRef<Path> {
+    fn new<P>(
+        filename: PathBuf,
+        content: Vec<u8>,
+        addr: String,
+        username: String,
+        passphrase: Option<&'a str>,
+        private_key: P,
+        public_key: P,
+    ) -> Self
+    where
+        P: AsRef<Path>,
+    {
         let private_key = private_key.as_ref();
         let public_key = public_key.as_ref();
 
-        SFTPFile{
+        SFTPFile {
             filename,
             content,
             username,
@@ -216,11 +288,21 @@ impl<'a> FsFile for SFTPFile<'a> {
         let tcp_stream = TcpStream::connect(self.addr.clone())?;
         let mut session = Session::new().ok_or(ChiconError::SFTPError)?;
         session.handshake(&tcp_stream)?;
-        session.userauth_pubkey_file(&self.username, Some(self.public_key.as_path()), self.private_key.as_path(), self.passphrase)?;
+        session.userauth_pubkey_file(
+            &self.username,
+            Some(self.public_key.as_path()),
+            self.private_key.as_path(),
+            self.passphrase,
+        )?;
         let sftp = session.sftp()?;
 
         // Bits comming from https://docs.rs/libssh2-sys/0.1.33/libssh2_sys/
-        let mut file = sftp.open_mode(&self.filename, OpenFlags::from_bits(2 | 16).unwrap(), 0o755, ssh2::OpenType::File)?;
+        let mut file = sftp.open_mode(
+            &self.filename,
+            OpenFlags::from_bits(2 | 16).unwrap(),
+            0o755,
+            ssh2::OpenType::File,
+        )?;
         file.write_all(self.content.as_slice())?;
         file.fsync().map_err(ChiconError::from)
     }
@@ -275,7 +357,6 @@ impl From<(PathBuf, FileStat)> for SFTPDirEntry {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,7 +364,7 @@ mod tests {
 
     #[test]
     fn test_create_dir() {
-        let sftp_fs = SFTPFileSystem::new(
+        let mut sftp_fs = SFTPFileSystem::new(
             String::from("127.0.0.1:2222"),
             env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
             None,
@@ -297,7 +378,7 @@ mod tests {
 
     #[test]
     fn test_read_dir() {
-        let sftp_fs = SFTPFileSystem::new(
+        let mut sftp_fs = SFTPFileSystem::new(
             String::from("127.0.0.1:2222"),
             env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
             None,
@@ -310,7 +391,10 @@ mod tests {
 
         let res = sftp_fs.read_dir("share/testreaddirtest").unwrap();
         assert_eq!(1, res.len());
-        assert_eq!(PathBuf::from(String::from("share/testreaddirtest/myfile")), res.get(0).unwrap().path().unwrap());
+        assert_eq!(
+            PathBuf::from(String::from("share/testreaddirtest/myfile")),
+            res.get(0).unwrap().path().unwrap()
+        );
 
         sftp_fs.remove_file("share/testreaddirtest/myfile").unwrap();
         sftp_fs.remove_dir("share/testreaddirtest").unwrap();
@@ -318,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_full_flow() {
-        let sftp_fs = SFTPFileSystem::new(
+        let mut sftp_fs = SFTPFileSystem::new(
             String::from("127.0.0.1:2222"),
             env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
             None,
@@ -342,7 +426,7 @@ mod tests {
 
     #[test]
     fn test_remove_dir_all() {
-        let sftp_fs = SFTPFileSystem::new(
+        let mut sftp_fs = SFTPFileSystem::new(
             String::from("127.0.0.1:2222"),
             env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
             None,
@@ -351,7 +435,9 @@ mod tests {
         );
 
         sftp_fs.create_dir("share/testremovedirtest").unwrap();
-        sftp_fs.create_file("share/testremovedirtest/myfile").unwrap();
+        sftp_fs
+            .create_file("share/testremovedirtest/myfile")
+            .unwrap();
 
         sftp_fs.remove_dir_all("share/testremovedirtest").unwrap();
     }

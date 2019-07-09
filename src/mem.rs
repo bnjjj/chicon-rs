@@ -1,14 +1,14 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::fs::Permissions;
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use crate::error::ChiconError;
 use crate::{DirEntry, File, FileSystem, FileType};
 
-// Arbre avec chaque node = un element du path
 #[derive(Default, Clone)]
 struct MemFileSystem {
     children: HashMap<String, MemDirEntry>,
@@ -56,35 +56,86 @@ impl MemFileSystem {
         {
             match entry {
                 MemDirEntry::Directory(dir) => dir.insert_file(path_iter.collect(), complete_path),
-                MemDirEntry::File(file) => {
-                    file.truncate(path_iter.collect())?;
-                    Ok(file.clone())
-                }
+                MemDirEntry::File(file) => Ok(file.clone()),
             }
         } else {
             // create file
             if path_iter.clone().peekable().peek().is_some() {
-                // insert directory and call insert_file on it
-                let mut dir = MemDirectory {
-                    name: current_path.to_string_lossy().into_owned(),
-                    perm: Permissions::from_mode(0o755),
-                    children: None,
-                };
-                let file_created = dir.insert_file(path_iter.collect(), complete_path)?;
-                self.children
-                    .insert(dir.name.clone(), MemDirEntry::Directory(dir.clone()));
-
-                Ok(file_created)
+                Err(ChiconError::MemDirNotFound(PathBuf::from(current_path)))
             } else {
-                let file = MemFile {
+                let file_internal = MemFileInternal {
                     name: current_path.to_string_lossy().into_owned(),
                     content: Vec::new(),
                     perm: Permissions::from_mode(0o755),
                     complete_path,
                 };
-                self.children
-                    .insert(file.name.clone(), MemDirEntry::File(file.clone()));
+                let file = MemFile(Rc::new(RefCell::new(file_internal)));
+
+                self.children.insert(
+                    current_path.to_string_lossy().into_owned(),
+                    MemDirEntry::File(file.clone()),
+                );
                 Ok(file)
+            }
+        }
+    }
+
+    fn insert_dir(&mut self, path: PathBuf, force: bool) -> Result<MemDirectory, ChiconError> {
+        let complete_path = path.clone();
+        let mut path_iter = path.iter();
+        let current_path = path_iter.next().ok_or(ChiconError::BadPath)?;
+
+        // if something already exist
+        if let Some(entry) = self
+            .children
+            .get_mut(&current_path.to_string_lossy().into_owned())
+        {
+            match entry {
+                MemDirEntry::Directory(dir) => {
+                    if path_iter.clone().peekable().peek().is_some() {
+                        dir.insert_dir(path_iter.collect(), complete_path, force)
+                    } else {
+                        Ok(dir.clone())
+                    }
+                }
+                MemDirEntry::File(_) => Err(ChiconError::BadPath),
+            }
+        } else {
+            if path_iter.clone().peekable().peek().is_some() {
+                if force {
+                    // insert directory and call insert_file on it
+                    let mut dir_internal = MemDirectoryInternal {
+                        name: current_path.to_string_lossy().into_owned(),
+                        perm: Permissions::from_mode(0o755),
+                        children: None,
+                        complete_path: complete_path.clone(),
+                    };
+                    let mut dir = MemDirectory(Rc::new(RefCell::new(dir_internal)));
+                    let new_dir = dir.insert_dir(path_iter.collect(), complete_path, force)?;
+                    self.children.insert(
+                        current_path.to_string_lossy().into_owned(),
+                        MemDirEntry::Directory(dir.clone()),
+                    );
+
+                    Ok(new_dir)
+                } else {
+                    Err(ChiconError::MemDirNotFound(PathBuf::from(current_path)))
+                }
+            } else {
+                let dir_internal = MemDirectoryInternal {
+                    name: current_path.to_string_lossy().into_owned(),
+                    perm: Permissions::from_mode(0o755),
+                    complete_path,
+                    children: None,
+                };
+                let dir = MemDirectory(Rc::new(RefCell::new(dir_internal)));
+
+                self.children.insert(
+                    current_path.to_string_lossy().into_owned(),
+                    MemDirEntry::Directory(dir.clone()),
+                );
+
+                Ok(dir)
             }
         }
     }
@@ -94,44 +145,66 @@ impl FileSystem for MemFileSystem {
     type File = MemFile;
     type DirEntry = MemDirEntry;
 
-    fn chmod<P: AsRef<Path>>(&self, path: P, perm: Permissions) -> Result<(), Self::FSError> {
-        let path = path.as_ref();
-        unimplemented!()
+    fn chmod<P: AsRef<Path>>(&self, _path: P, _perm: Permissions) -> Result<(), Self::FSError> {
+        Ok(())
     }
-    fn create_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError> {
+    fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<Self::File, Self::FSError> {
         let path = path.as_ref();
+        self.insert_file(PathBuf::from(path))
+    }
+    fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+        let path = path.as_ref();
+        self.insert_dir(PathBuf::from(path), false)?;
 
-        unimplemented!()
+        Ok(())
     }
-    fn create_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn create_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
-        unimplemented!()
-    }
-    fn create_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
-        let path = path.as_ref();
-        unimplemented!()
+        self.insert_dir(PathBuf::from(path), true)?;
+
+        Ok(())
     }
     fn open_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError> {
         let path = path.as_ref();
-        unimplemented!()
+        if let Some(entry) = self.get_from_relative_path(PathBuf::from(path)) {
+            match entry {
+                MemDirEntry::File(file) => Ok(file),
+                _ => Err(ChiconError::MemFileNotFound(PathBuf::from(path))),
+            }
+        } else {
+            Err(ChiconError::MemFileNotFound(PathBuf::from(path)))
+        }
     }
     fn read_dir<P: AsRef<Path>>(&self, path: P) -> Result<Vec<Self::DirEntry>, Self::FSError> {
         let path = path.as_ref();
-        unimplemented!()
+        if let Some(entry) = self.get_from_relative_path(PathBuf::from(path)) {
+            match entry {
+                MemDirEntry::Directory(dir) => {
+                    if let Some(children) = &dir.0.try_borrow()?.children {
+                        Ok(children.iter().map(|(_, child)| child.clone()).collect())
+                    } else {
+                        Ok(Vec::new())
+                    }
+                }
+                _ => Err(ChiconError::MemFileNotFound(PathBuf::from(path))),
+            }
+        } else {
+            Err(ChiconError::MemFileNotFound(PathBuf::from(path)))
+        }
     }
-    fn remove_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
         unimplemented!()
     }
-    fn remove_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
         unimplemented!()
     }
-    fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
+    fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
         unimplemented!()
     }
-    fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Result<(), Self::FSError> {
+    fn rename<P: AsRef<Path>>(&mut self, from: P, to: P) -> Result<(), Self::FSError> {
         let from = from.as_ref();
         let to = to.as_ref();
         unimplemented!()
@@ -139,45 +212,78 @@ impl FileSystem for MemFileSystem {
 }
 
 #[derive(Clone)]
-struct MemFile {
+struct MemFileInternal {
     complete_path: PathBuf,
     name: String,
     content: Vec<u8>,
     perm: Permissions,
 }
-impl MemFile {
-    fn truncate(&mut self, path: PathBuf) -> Result<(), ChiconError> {
-        if !self.content.is_empty() {
-            // check with std::fs library if it clears the content
-            self.content.clear();
-        }
-        Ok(())
-    }
-}
+
+#[derive(Clone)]
+pub struct MemFile(Rc<RefCell<MemFileInternal>>);
 impl File for MemFile {
     type FSError = ChiconError;
 
     fn sync_all(&mut self) -> Result<(), Self::FSError> {
-        // Get MemFile from filesystem and update him
-
         Ok(())
     }
 }
 
 impl Read for MemFile {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        let mut content_slice = self.content.as_slice();
+        let mut cloned_content: Vec<u8> = Vec::new();
+        {
+            let content = &self
+                .0
+                .try_borrow()
+                .map_err(|err| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("cannot borrow the file to fill the content : {:?}", err),
+                    )
+                })?
+                .content;
+            cloned_content = content.clone();
+        }
+        let mut content_slice = cloned_content.as_slice();
         let nb = content_slice.read(buf)?;
-        self.content = content_slice.to_vec();
+
+        self.0
+            .try_borrow_mut()
+            .map_err(|err| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("cannot borrow mut the file to fill the content : {:?}", err),
+                )
+            })?
+            .content = content_slice.to_vec();
         Ok(nb)
     }
 }
 impl Write for MemFile {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        self.content.write(buf)
+        self.0
+            .try_borrow_mut()
+            .map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "cannot borrow mut the file to write",
+                )
+            })?
+            .content
+            .write(buf)
     }
     fn flush(&mut self) -> Result<(), std::io::Error> {
-        self.content.flush()
+        self.0
+            .try_borrow_mut()
+            .map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "cannot borrow mut the file to flush",
+                )
+            })?
+            .content
+            .flush()
     }
 }
 
@@ -191,8 +297,8 @@ impl DirEntry for MemDirEntry {
 
     fn path(&self) -> Result<PathBuf, Self::FSError> {
         match self {
-            MemDirEntry::Directory(dir) => Ok(PathBuf::from(dir.name.clone())),
-            MemDirEntry::File(file) => Ok(PathBuf::from(file.complete_path.clone())),
+            MemDirEntry::Directory(dir) => Ok(PathBuf::from(dir.0.try_borrow()?.name.clone())),
+            MemDirEntry::File(file) => Ok(file.0.try_borrow()?.complete_path.clone()),
         }
     }
 
@@ -214,14 +320,14 @@ impl MemDirEntry {
 
         match self {
             MemDirEntry::File(file) => {
-                if file.name == current_path.to_string_lossy().into_owned() {
+                if file.0.try_borrow().ok()?.name == current_path.to_string_lossy().into_owned() {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             MemDirEntry::Directory(dir) => {
-                if dir.name == current_path.to_string_lossy().into_owned() {
+                if dir.0.try_borrow().ok()?.name == current_path.to_string_lossy().into_owned() {
                     Some(self.clone())
                 } else {
                     dir.get_from_relative_path(path)
@@ -232,12 +338,14 @@ impl MemDirEntry {
 }
 
 #[derive(Clone)]
-struct MemDirectory {
-    // complete_path: PathBuf,
+struct MemDirectoryInternal {
+    complete_path: PathBuf,
     name: String,
     perm: Permissions,
     children: Option<HashMap<String, MemDirEntry>>,
 }
+#[derive(Clone)]
+struct MemDirectory(Rc<RefCell<MemDirectoryInternal>>);
 impl MemDirectory {
     fn get_from_relative_path(&self, path: PathBuf) -> Option<MemDirEntry> {
         let mut path_iter = path.iter();
@@ -246,7 +354,8 @@ impl MemDirectory {
         } else {
             return None;
         };
-        let children = if let Some(children_entry) = &self.children {
+        let mem_dir = self.0.try_borrow().ok()?;
+        let children = if let Some(children_entry) = &mem_dir.children {
             children_entry
         } else {
             return None;
@@ -262,47 +371,108 @@ impl MemDirectory {
         path: PathBuf,
         complete_path: PathBuf,
     ) -> Result<MemFile, ChiconError> {
-        if self.children.is_none() {
-            self.children = Some(HashMap::new());
+        if self.0.try_borrow()?.children.is_none() {
+            self.0.try_borrow_mut()?.children = Some(HashMap::new());
         }
         let mut path_iter = path.iter();
         let current_path = path_iter.next().ok_or(ChiconError::BadPath)?;
 
-        if let Some(children) = &mut self.children {
+        if let Some(children) = &mut self.0.try_borrow_mut()?.children {
             // if something already exist
             if let Some(entry) = children.get_mut(&current_path.to_string_lossy().into_owned()) {
                 match entry {
                     MemDirEntry::Directory(dir) => {
                         dir.insert_file(path_iter.collect(), complete_path)
                     }
-                    MemDirEntry::File(file) => {
-                        file.truncate(path_iter.collect())?;
-                        Ok(file.clone())
-                    }
+                    MemDirEntry::File(file) => Ok(file.clone()),
                 }
             } else {
                 // create file
                 if path_iter.clone().peekable().peek().is_some() {
-                    // insert directory and call insert_file on it
-                    let mut dir = MemDirectory {
-                        name: current_path.to_string_lossy().into_owned(),
-                        perm: Permissions::from_mode(0o755),
-                        children: None,
-                    };
-                    let file_created = dir.insert_file(path_iter.collect(), complete_path)?;
-                    children.insert(dir.name.clone(), MemDirEntry::Directory(dir.clone()));
-
-                    Ok(file_created)
+                    Err(ChiconError::MemDirNotFound(PathBuf::from(current_path)))
                 } else {
-                    let file = MemFile {
+                    let file_internal = MemFileInternal {
                         name: current_path.to_string_lossy().into_owned(),
                         content: Vec::new(),
                         perm: Permissions::from_mode(0o755),
                         complete_path,
                     };
-                    children.insert(file.name.clone(), MemDirEntry::File(file.clone()));
+                    let file = MemFile(Rc::new(RefCell::new(file_internal)));
+
+                    children.insert(
+                        current_path.to_string_lossy().into_owned(),
+                        MemDirEntry::File(file.clone()),
+                    );
 
                     Ok(file)
+                }
+            }
+        } else {
+            Err(ChiconError::BadPath)
+        }
+    }
+
+    fn insert_dir(
+        &mut self,
+        path: PathBuf,
+        complete_path: PathBuf,
+        force: bool,
+    ) -> Result<MemDirectory, ChiconError> {
+        if self.0.try_borrow()?.children.is_none() {
+            self.0.try_borrow_mut()?.children = Some(HashMap::new());
+        }
+        let mut path_iter = path.iter();
+        let current_path = path_iter.next().ok_or(ChiconError::BadPath)?;
+
+        if let Some(children) = &mut self.0.try_borrow_mut()?.children {
+            // if something already exist
+            if let Some(entry) = children.get_mut(&current_path.to_string_lossy().into_owned()) {
+                match entry {
+                    MemDirEntry::Directory(dir) => {
+                        if path_iter.clone().peekable().peek().is_some() {
+                            dir.insert_dir(path_iter.collect(), complete_path, force)
+                        } else {
+                            Ok(dir.clone())
+                        }
+                    }
+                    MemDirEntry::File(_) => Err(ChiconError::BadPath),
+                }
+            } else {
+                // create file
+                if path_iter.clone().peekable().peek().is_some() {
+                    if force {
+                        let mut dir_internal = MemDirectoryInternal {
+                            name: current_path.to_string_lossy().into_owned(),
+                            perm: Permissions::from_mode(0o755),
+                            children: None,
+                            complete_path: complete_path.clone(),
+                        };
+                        let mut dir = MemDirectory(Rc::new(RefCell::new(dir_internal)));
+                        let new_dir = dir.insert_dir(path_iter.collect(), complete_path, force)?;
+                        children.insert(
+                            current_path.to_string_lossy().into_owned(),
+                            MemDirEntry::Directory(dir.clone()),
+                        );
+
+                        Ok(new_dir)
+                    } else {
+                        Err(ChiconError::MemDirNotFound(PathBuf::from(current_path)))
+                    }
+                } else {
+                    let dir_internal = MemDirectoryInternal {
+                        name: current_path.to_string_lossy().into_owned(),
+                        perm: Permissions::from_mode(0o755),
+                        complete_path,
+                        children: None,
+                    };
+                    let dir = MemDirectory(Rc::new(RefCell::new(dir_internal)));
+
+                    children.insert(
+                        current_path.to_string_lossy().into_owned(),
+                        MemDirEntry::Directory(dir.clone()),
+                    );
+
+                    Ok(dir)
                 }
             }
         } else {
@@ -319,26 +489,30 @@ mod tests {
     fn test_fs_internals() {
         let mut mem_fs = MemFileSystem::new();
         let mut children_other: HashMap<String, MemDirEntry> = HashMap::new();
-        let file = MemFile {
+        let file_internal = MemFileInternal {
             name: String::from("test.test"),
             content: Vec::new(),
             perm: Permissions::from_mode(0o644),
             complete_path: PathBuf::from("test.test"),
         };
+        let file = MemFile(Rc::new(RefCell::new(file_internal)));
         children_other.insert("test.test".to_string(), MemDirEntry::File(file));
-        let other_dir = MemDirectory {
+        let other_dir_internal = MemDirectoryInternal {
             name: String::from("other"),
             perm: Permissions::from_mode(0o644),
             children: Some(children_other),
+            complete_path: PathBuf::from("test/other"),
         };
-
+        let other_dir = MemDirectory(Rc::new(RefCell::new(other_dir_internal)));
         let mut children: HashMap<String, MemDirEntry> = HashMap::new();
         children.insert("other".to_string(), MemDirEntry::Directory(other_dir));
-        let dir = MemDirectory {
+        let dir_internal = MemDirectoryInternal {
             name: String::from("test"),
             perm: Permissions::from_mode(0o644),
             children: Some(children),
+            complete_path: PathBuf::from("test"),
         };
+        let dir = MemDirectory(Rc::new(RefCell::new(dir_internal)));
 
         mem_fs
             .children
@@ -358,22 +532,98 @@ mod tests {
     #[test]
     fn test_fs_internals_insert_file() {
         let mut mem_fs = MemFileSystem::new();
-        mem_fs
-            .insert_file(PathBuf::from("test/other/test.test"))
-            .unwrap();
+        mem_fs.insert_file(PathBuf::from("test.test")).unwrap();
 
-        let found = mem_fs.get_from_relative_path(PathBuf::from("test/other/test.test"));
+        let found = mem_fs.get_from_relative_path(PathBuf::from("test.test"));
         assert!(found.is_some());
         let mem_file = found.unwrap();
 
         assert_eq!(mem_file.file_type().unwrap(), FileType::File);
-        assert_eq!(
-            mem_file.path().unwrap(),
-            PathBuf::from("test/other/test.test")
+        assert_eq!(mem_file.path().unwrap(), PathBuf::from("test.test"));
+
+        let not_found = mem_fs.get_from_relative_path(PathBuf::from("bla.test"));
+        assert!(not_found.is_none());
+
+        assert!(mem_fs
+            .insert_file(PathBuf::from("test/other/test.test"))
+            .is_err());
+    }
+
+    #[test]
+    fn test_read_dir() {
+        let mut mem_fs = MemFileSystem::new();
+        // use create_dir_all before
+        mem_fs.create_dir_all("share/testmemreaddir").unwrap();
+        mem_fs.create_file("share/testmemreaddir/myfile").unwrap();
+        mem_fs
+            .create_file("share/testmemreaddir/myotherfile")
+            .unwrap();
+
+        let res = mem_fs.read_dir("share/testmemreaddir").unwrap();
+        assert_eq!(2, res.len());
+        assert!(
+            PathBuf::from(String::from("share/testmemreaddir/myfile"))
+                == res.get(0).unwrap().path().unwrap()
+                || PathBuf::from(String::from("share/testmemreaddir/myotherfile"))
+                    == res.get(0).unwrap().path().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_create_dir() {
+        let mut mem_fs = MemFileSystem::new();
+        // use create_dir_all before
+        assert!(mem_fs.create_dir("share/testmemreaddir").is_err());
+        mem_fs.create_dir_all("share/testmemreaddir").unwrap();
+        mem_fs.create_dir_all("share/testmemreaddir").unwrap(); //TODO: check but it should return an error I think
+        mem_fs.create_file("share/testmemreaddir/myfile").unwrap();
+        mem_fs
+            .create_file("share/testmemreaddir/myotherfile")
+            .unwrap();
+
+        let res = mem_fs.read_dir("share/testmemreaddir").unwrap();
+        assert_eq!(2, res.len());
+        assert!(
+            PathBuf::from(String::from("share/testmemreaddir/myfile"))
+                == res.get(0).unwrap().path().unwrap()
+                || PathBuf::from(String::from("share/testmemreaddir/myotherfile"))
+                    == res.get(0).unwrap().path().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_create_file() {
+        let mut mem_fs = MemFileSystem::new();
+        // use create_dir_all before
+        assert!(mem_fs.create_dir("share/testmemreaddir").is_err());
+        mem_fs.create_dir_all("share/testmemreaddir").unwrap();
+        mem_fs.create_dir_all("share/testmemreaddir").unwrap(); //TODO: check but it should return an error I think
+        mem_fs.create_file("share/testmemreaddir/myfile").unwrap();
+        mem_fs
+            .create_file("share/testmemreaddir/myotherfile")
+            .unwrap();
+
+        let res = mem_fs.read_dir("share/testmemreaddir").unwrap();
+        assert_eq!(2, res.len());
+        assert!(
+            PathBuf::from(String::from("share/testmemreaddir/myfile"))
+                == res.get(0).unwrap().path().unwrap()
+                || PathBuf::from(String::from("share/testmemreaddir/myotherfile"))
+                    == res.get(0).unwrap().path().unwrap()
         );
 
-        let not_found = mem_fs.get_from_relative_path(PathBuf::from("test/other/bla.test"));
-        assert!(not_found.is_none());
+        let mut file = mem_fs
+            .open_file("share/testmemreaddir/myotherfile")
+            .unwrap();
+        let mut buffer = String::new();
+        {
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+            file.read_to_string(&mut buffer).unwrap();
+        }
+
+        assert_eq!(buffer, String::from("coucoutoi"));
     }
 
 }

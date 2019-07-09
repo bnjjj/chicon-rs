@@ -157,15 +157,15 @@ pub trait FileSystem {
     type DirEntry: DirEntry;
 
     fn chmod<P: AsRef<Path>>(&self, path: P, perm: Permissions) -> Result<(), Self::FSError>;
-    fn create_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError>;
-    fn create_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError>;
-    fn create_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError>;
+    fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<Self::File, Self::FSError>;
+    fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError>;
+    fn create_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError>;
     fn open_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError>;
     fn read_dir<P: AsRef<Path>>(&self, path: P) -> Result<Vec<Self::DirEntry>, Self::FSError>;
-    fn remove_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError>;
-    fn remove_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError>;
-    fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError>;
-    fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Result<(), Self::FSError>;
+    fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError>;
+    fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError>;
+    fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError>;
+    fn rename<P: AsRef<Path>>(&mut self, from: P, to: P) -> Result<(), Self::FSError>;
 }
 
 /// Trait that represent a file inside our FileSystem. Associated type `File` in our `FileSystem` trait must implement this trait.
