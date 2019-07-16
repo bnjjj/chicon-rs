@@ -141,7 +141,8 @@ impl MemFileSystem {
     }
 
     // TODO: add force boolean for remove_dir_all
-    fn remove(&mut self, path: PathBuf, entry_type: FileType) -> Option<MemDirEntry> {
+    // TODO: return result instead of option
+    fn remove(&mut self, path: PathBuf, entry_type: FileType, force: bool) -> Option<MemDirEntry> {
         if self.children.is_empty() {
             return None;
         }
@@ -160,6 +161,17 @@ impl MemFileSystem {
             if path_iter.clone().peekable().peek().is_some() {
                 child_entry
             } else if child_entry.file_type().unwrap() == entry_type {
+                // check force
+                if let MemDirEntry::Directory(dir_entry) = child_entry {
+                    let dir_internal = dir_entry.0.try_borrow().ok()?;
+                    if let Some(dir_children) = &dir_internal.children {
+                        if !dir_children.is_empty() && !force {
+                            // Return error
+                            return None;
+                        }
+                    }
+                }
+
                 return self
                     .children
                     .remove(&current_path.to_string_lossy().into_owned());
@@ -170,7 +182,7 @@ impl MemFileSystem {
             return None;
         };
 
-        child.remove(path_iter.collect(), entry_type)
+        child.remove(path_iter.collect(), entry_type, force)
     }
 }
 impl FileSystem for MemFileSystem {
@@ -227,21 +239,21 @@ impl FileSystem for MemFileSystem {
     }
     fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
-        self.remove(PathBuf::from(path), FileType::File)
+        self.remove(PathBuf::from(path), FileType::File, false)
             .map(|_| ())
             .ok_or(ChiconError::BadPath)
     }
     fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
-        self.remove(PathBuf::from(path), FileType::Directory)
+        self.remove(PathBuf::from(path), FileType::Directory, false)
             .map(|_| ())
             .ok_or(ChiconError::BadPath)
     }
     fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
-        // add force boolean
-        // self.remove(PathBuf::from(path), FileType::Directory).map(|_| ()).ok_or(ChiconError::BadPath)
-        unimplemented!()
+        self.remove(PathBuf::from(path), FileType::Directory, true)
+            .map(|_| ())
+            .ok_or(ChiconError::BadPath)
     }
     fn rename<P: AsRef<Path>>(&mut self, from: P, to: P) -> Result<(), Self::FSError> {
         let from = from.as_ref();
@@ -375,7 +387,7 @@ impl MemDirEntry {
         }
     }
 
-    fn remove(&mut self, path: PathBuf, entry_type: FileType) -> Option<MemDirEntry> {
+    fn remove(&mut self, path: PathBuf, entry_type: FileType, force: bool) -> Option<MemDirEntry> {
         let mut path_iter = path.iter();
         let current_path = if let Some(cur_path) = path_iter.next() {
             cur_path
@@ -385,7 +397,7 @@ impl MemDirEntry {
 
         match self {
             MemDirEntry::File(file) => None,
-            MemDirEntry::Directory(dir) => dir.remove(path, entry_type),
+            MemDirEntry::Directory(dir) => dir.remove(path, entry_type, force),
         }
     }
 }
@@ -533,7 +545,7 @@ impl MemDirectory {
         }
     }
 
-    fn remove(&mut self, path: PathBuf, entry_type: FileType) -> Option<MemDirEntry> {
+    fn remove(&mut self, path: PathBuf, entry_type: FileType, force: bool) -> Option<MemDirEntry> {
         let mut path_iter = path.iter();
         let current_path = if let Some(cur_path) = path_iter.next() {
             cur_path
@@ -549,8 +561,17 @@ impl MemDirectory {
         };
         if let Some(child_entry) = children.get_mut(&current_path.to_string_lossy().into_owned()) {
             if path_iter.clone().peekable().peek().is_some() {
-                child_entry.remove(path_iter.collect(), entry_type)
+                child_entry.remove(path_iter.collect(), entry_type, force)
             } else {
+                // check force
+                if let MemDirEntry::Directory(dir_entry) = child_entry {
+                    let dir_internal = dir_entry.0.try_borrow().ok()?;
+                    if let Some(dir_children) = &dir_internal.children {
+                        if !dir_children.is_empty() && !force {
+                            return None;
+                        }
+                    }
+                }
                 children.remove(&current_path.to_string_lossy().into_owned())
             }
         } else {
@@ -758,6 +779,12 @@ mod tests {
             .create_file("share/testmemreaddir/myotherfile")
             .unwrap();
 
+        assert!(mem_fs.remove_dir("share").is_err());
+        assert!(mem_fs.remove_dir("share/testmemreaddir").is_err());
+        mem_fs.remove_file("share/testmemreaddir/myfile").unwrap();
+        mem_fs
+            .remove_file("share/testmemreaddir/myotherfile")
+            .unwrap();
         mem_fs.remove_dir("share/testmemreaddir").unwrap();
 
         assert!(mem_fs.read_dir("share/testmemreaddir").is_err());
