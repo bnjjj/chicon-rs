@@ -139,6 +139,39 @@ impl MemFileSystem {
             }
         }
     }
+
+    // TODO: add force boolean for remove_dir_all
+    fn remove(&mut self, path: PathBuf, entry_type: FileType) -> Option<MemDirEntry> {
+        if self.children.is_empty() {
+            return None;
+        }
+
+        let mut path_iter = path.iter();
+        let current_path = if let Some(cur_path) = path_iter.next() {
+            cur_path
+        } else {
+            return None;
+        };
+
+        let child = if let Some(child_entry) = self
+            .children
+            .get_mut(&current_path.to_string_lossy().into_owned())
+        {
+            if path_iter.clone().peekable().peek().is_some() {
+                child_entry
+            } else if child_entry.file_type().unwrap() == entry_type {
+                return self
+                    .children
+                    .remove(&current_path.to_string_lossy().into_owned());
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        };
+
+        child.remove(path_iter.collect(), entry_type)
+    }
 }
 impl FileSystem for MemFileSystem {
     type FSError = ChiconError;
@@ -194,14 +227,20 @@ impl FileSystem for MemFileSystem {
     }
     fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
-        unimplemented!()
+        self.remove(PathBuf::from(path), FileType::File)
+            .map(|_| ())
+            .ok_or(ChiconError::BadPath)
     }
     fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
-        unimplemented!()
+        self.remove(PathBuf::from(path), FileType::Directory)
+            .map(|_| ())
+            .ok_or(ChiconError::BadPath)
     }
     fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
+        // add force boolean
+        // self.remove(PathBuf::from(path), FileType::Directory).map(|_| ()).ok_or(ChiconError::BadPath)
         unimplemented!()
     }
     fn rename<P: AsRef<Path>>(&mut self, from: P, to: P) -> Result<(), Self::FSError> {
@@ -333,6 +372,20 @@ impl MemDirEntry {
                     dir.get_from_relative_path(path)
                 }
             }
+        }
+    }
+
+    fn remove(&mut self, path: PathBuf, entry_type: FileType) -> Option<MemDirEntry> {
+        let mut path_iter = path.iter();
+        let current_path = if let Some(cur_path) = path_iter.next() {
+            cur_path
+        } else {
+            return None;
+        };
+
+        match self {
+            MemDirEntry::File(file) => None,
+            MemDirEntry::Directory(dir) => dir.remove(path, entry_type),
         }
     }
 }
@@ -479,6 +532,31 @@ impl MemDirectory {
             Err(ChiconError::BadPath)
         }
     }
+
+    fn remove(&mut self, path: PathBuf, entry_type: FileType) -> Option<MemDirEntry> {
+        let mut path_iter = path.iter();
+        let current_path = if let Some(cur_path) = path_iter.next() {
+            cur_path
+        } else {
+            return None;
+        };
+
+        let mut mem_dir = self.0.try_borrow_mut().ok()?;
+        let children = if let Some(children_entry) = &mut mem_dir.children {
+            children_entry
+        } else {
+            return None;
+        };
+        if let Some(child_entry) = children.get_mut(&current_path.to_string_lossy().into_owned()) {
+            if path_iter.clone().peekable().peek().is_some() {
+                child_entry.remove(path_iter.collect(), entry_type)
+            } else {
+                children.remove(&current_path.to_string_lossy().into_owned())
+            }
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -575,7 +653,7 @@ mod tests {
         // use create_dir_all before
         assert!(mem_fs.create_dir("share/testmemreaddir").is_err());
         mem_fs.create_dir_all("share/testmemreaddir").unwrap();
-        mem_fs.create_dir_all("share/testmemreaddir").unwrap(); //TODO: check but it should return an error I think
+        mem_fs.create_dir_all("share/testmemreaddir").unwrap();
         mem_fs.create_file("share/testmemreaddir/myfile").unwrap();
         mem_fs
             .create_file("share/testmemreaddir/myotherfile")
@@ -597,7 +675,7 @@ mod tests {
         // use create_dir_all before
         assert!(mem_fs.create_dir("share/testmemreaddir").is_err());
         mem_fs.create_dir_all("share/testmemreaddir").unwrap();
-        mem_fs.create_dir_all("share/testmemreaddir").unwrap(); //TODO: check but it should return an error I think
+        mem_fs.create_dir_all("share/testmemreaddir").unwrap();
         mem_fs.create_file("share/testmemreaddir/myfile").unwrap();
         mem_fs
             .create_file("share/testmemreaddir/myotherfile")
@@ -624,6 +702,65 @@ mod tests {
         }
 
         assert_eq!(buffer, String::from("coucoutoi"));
+    }
+
+    #[test]
+    fn test_remove_file() {
+        let mut mem_fs = MemFileSystem::new();
+        // use create_dir_all before
+        assert!(mem_fs.create_dir("share/testmemreaddir").is_err());
+        mem_fs.create_dir_all("share/testmemreaddir").unwrap();
+        mem_fs.create_dir_all("share/testmemreaddir").unwrap();
+        mem_fs.create_file("share/testmemreaddir/myfile").unwrap();
+        mem_fs
+            .create_file("share/testmemreaddir/myotherfile")
+            .unwrap();
+
+        let res = mem_fs.read_dir("share/testmemreaddir").unwrap();
+        assert_eq!(2, res.len());
+        assert!(
+            PathBuf::from(String::from("share/testmemreaddir/myfile"))
+                == res.get(0).unwrap().path().unwrap()
+                || PathBuf::from(String::from("share/testmemreaddir/myotherfile"))
+                    == res.get(0).unwrap().path().unwrap()
+        );
+
+        let mut file = mem_fs
+            .open_file("share/testmemreaddir/myotherfile")
+            .unwrap();
+        let mut buffer = String::new();
+        {
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+            file.read_to_string(&mut buffer).unwrap();
+        }
+
+        assert_eq!(buffer, String::from("coucoutoi"));
+
+        mem_fs
+            .remove_file("share/testmemreaddir/myotherfile")
+            .unwrap();
+
+        assert!(mem_fs
+            .open_file("share/testmemreaddir/myotherfile")
+            .is_err());
+    }
+
+    #[test]
+    fn test_remove_dir() {
+        let mut mem_fs = MemFileSystem::new();
+        assert!(mem_fs.create_dir("share/testmemreaddir").is_err());
+        mem_fs.create_dir_all("share/testmemreaddir").unwrap();
+        mem_fs.create_dir_all("share/testmemreaddir").unwrap();
+        mem_fs.create_file("share/testmemreaddir/myfile").unwrap();
+        mem_fs
+            .create_file("share/testmemreaddir/myotherfile")
+            .unwrap();
+
+        mem_fs.remove_dir("share/testmemreaddir").unwrap();
+
+        assert!(mem_fs.read_dir("share/testmemreaddir").is_err());
     }
 
 }
