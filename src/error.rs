@@ -27,6 +27,7 @@ pub enum ChiconError {
     BorrowMutError(BorrowMutError),
     MemFileNotFound(PathBuf),
     MemDirNotFound(PathBuf),
+    MemDirNotEmpty(PathBuf),
 }
 
 impl fmt::Debug for ChiconError {
@@ -64,6 +65,7 @@ impl fmt::Debug for ChiconError {
             ChiconError::BorrowMutError(err) => write!(f, "Borrow mut error : {:?}", err),
             ChiconError::MemFileNotFound(path) => write!(f, "Error memory file not found : {:?}", path),
             ChiconError::MemDirNotFound(path) => write!(f, "Error memory directory not found : {:?}", path),
+            ChiconError::MemDirNotEmpty(path) => write!(f, "Error memory directory is not empty : {:?}", path),
         }
     }
 }
