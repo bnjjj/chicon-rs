@@ -9,8 +9,9 @@ use std::rc::Rc;
 use crate::error::ChiconError;
 use crate::{DirEntry, File, FileSystem, FileType};
 
+/// Structure implementing `FileSystem` trait to store on an in memory filesystem, for now please only for testing use cases ! Need to be benchmarked before production use
 #[derive(Default, Clone)]
-struct MemFileSystem {
+pub struct MemFileSystem {
     children: HashMap<String, MemDirEntry>,
 }
 impl FileSystem for MemFileSystem {
@@ -97,11 +98,7 @@ impl MemFileSystem {
         }
 
         let mut path_iter = path.iter();
-        let current_path = if let Some(cur_path) = path_iter.next() {
-            cur_path
-        } else {
-            return None;
-        };
+        let current_path = path_iter.next()?;
 
         let child = if let Some(child_entry) = self
             .children
@@ -171,43 +168,41 @@ impl MemFileSystem {
                 }
                 MemDirEntry::File(_) => Err(ChiconError::BadPath),
             }
-        } else {
-            if path_iter.clone().peekable().peek().is_some() {
-                if force {
-                    // insert directory and call insert_file on it
-                    let dir_internal = MemDirectoryInternal {
-                        name: current_path.to_string_lossy().into_owned(),
-                        perm: Permissions::from_mode(0o755),
-                        children: None,
-                        complete_path: complete_path.clone(),
-                    };
-                    let mut dir = MemDirectory(Rc::new(RefCell::new(dir_internal)));
-                    let new_dir = dir.insert_dir(path_iter.collect(), complete_path, force)?;
-                    self.children.insert(
-                        current_path.to_string_lossy().into_owned(),
-                        MemDirEntry::Directory(dir.clone()),
-                    );
-
-                    Ok(new_dir)
-                } else {
-                    Err(ChiconError::MemDirNotFound(PathBuf::from(current_path)))
-                }
-            } else {
+        } else if path_iter.clone().peekable().peek().is_some() {
+            if force {
+                // insert directory and call insert_file on it
                 let dir_internal = MemDirectoryInternal {
                     name: current_path.to_string_lossy().into_owned(),
                     perm: Permissions::from_mode(0o755),
-                    complete_path,
                     children: None,
+                    complete_path: complete_path.clone(),
                 };
-                let dir = MemDirectory(Rc::new(RefCell::new(dir_internal)));
-
+                let mut dir = MemDirectory(Rc::new(RefCell::new(dir_internal)));
+                let new_dir = dir.insert_dir(path_iter.collect(), complete_path, force)?;
                 self.children.insert(
                     current_path.to_string_lossy().into_owned(),
                     MemDirEntry::Directory(dir.clone()),
                 );
 
-                Ok(dir)
+                Ok(new_dir)
+            } else {
+                Err(ChiconError::MemDirNotFound(PathBuf::from(current_path)))
             }
+        } else {
+            let dir_internal = MemDirectoryInternal {
+                name: current_path.to_string_lossy().into_owned(),
+                perm: Permissions::from_mode(0o755),
+                complete_path,
+                children: None,
+            };
+            let dir = MemDirectory(Rc::new(RefCell::new(dir_internal)));
+
+            self.children.insert(
+                current_path.to_string_lossy().into_owned(),
+                MemDirEntry::Directory(dir.clone()),
+            );
+
+            Ok(dir)
         }
     }
 
@@ -224,13 +219,8 @@ impl MemFileSystem {
                 _ => Err(ChiconError::BadPath),
             };
         }
-
         let mut path_iter = path.iter();
-        let current_path = if let Some(cur_path) = path_iter.next() {
-            cur_path
-        } else {
-            return Err(ChiconError::BadPath);
-        };
+        let current_path = path_iter.next().ok_or(ChiconError::BadPath)?;
 
         let child = if let Some(child_entry) = self
             .children
@@ -272,17 +262,9 @@ impl MemFileSystem {
         }
 
         let mut path_iter = path.iter();
-        let current_path = if let Some(cur_path) = path_iter.next() {
-            cur_path
-        } else {
-            return Err(ChiconError::BadPath);
-        };
+        let current_path = path_iter.next().ok_or(ChiconError::BadPath)?;
         let mut new_path_iter = new_path.iter();
-        let current_new_path = if let Some(cur_new_path) = new_path_iter.next() {
-            cur_new_path
-        } else {
-            return Err(ChiconError::BadPath);
-        };
+        let current_new_path = new_path_iter.next().ok_or(ChiconError::BadPath)?;
 
         let child = if let Some(child_entry) = self
             .children
@@ -339,6 +321,7 @@ struct MemFileInternal {
     perm: Permissions,
 }
 
+/// Structure implementing File trait to represent a file on an in memory filesystem
 #[derive(Clone)]
 pub struct MemFile(Rc<RefCell<MemFileInternal>>);
 impl File for MemFile {
@@ -351,7 +334,7 @@ impl File for MemFile {
 
 impl Read for MemFile {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        let mut cloned_content: Vec<u8> = Vec::new();
+        let mut cloned_content: Vec<u8>;
         {
             let content = &self
                 .0
@@ -407,8 +390,9 @@ impl Write for MemFile {
     }
 }
 
+/// Structure implementing `DirEntry` trait to represent an entry in a directory on an in memory filesystem
 #[derive(Clone)]
-enum MemDirEntry {
+pub enum MemDirEntry {
     File(MemFile),
     Directory(MemDirectory),
 }
@@ -489,8 +473,9 @@ struct MemDirectoryInternal {
     perm: Permissions,
     children: Option<HashMap<String, MemDirEntry>>,
 }
+/// Structure representing a directory on an in memory filesystem
 #[derive(Clone)]
-struct MemDirectory(Rc<RefCell<MemDirectoryInternal>>);
+pub struct MemDirectory(Rc<RefCell<MemDirectoryInternal>>);
 impl MemDirectory {
     fn get_from_relative_path(&self, path: PathBuf) -> Option<MemDirEntry> {
         let mut path_iter = path.iter();
@@ -632,11 +617,7 @@ impl MemDirectory {
         force: bool,
     ) -> Result<(), ChiconError> {
         let mut path_iter = path.iter();
-        let current_path = if let Some(cur_path) = path_iter.next() {
-            cur_path
-        } else {
-            return Err(ChiconError::BadPath);
-        };
+        let current_path = path_iter.next().ok_or(ChiconError::BadPath)?;
 
         let mut mem_dir = self.0.try_borrow_mut()?;
         let children = if let Some(children_entry) = &mut mem_dir.children {
@@ -676,17 +657,9 @@ impl MemDirectory {
         complete_path: PathBuf,
     ) -> Result<(), ChiconError> {
         let mut path_iter = path.iter();
-        let current_path = if let Some(cur_path) = path_iter.next() {
-            cur_path
-        } else {
-            return Err(ChiconError::BadPath);
-        };
+        let current_path = path_iter.next().ok_or(ChiconError::BadPath)?;
         let mut new_path_iter = new_path.iter();
-        let current_new_path = if let Some(cur_new_path) = new_path_iter.next() {
-            cur_new_path
-        } else {
-            return Err(ChiconError::BadPath);
-        };
+        let current_new_path = new_path_iter.next().ok_or(ChiconError::BadPath)?;
 
         let mut mem_dir = self.0.try_borrow_mut()?;
         let children = if let Some(children_entry) = &mut mem_dir.children {
@@ -877,6 +850,12 @@ mod tests {
         }
 
         assert_eq!(buffer, String::from("coucoutoi"));
+
+        file.write_all(b"Blabla").unwrap();
+        file.sync_all().unwrap();
+        file.read_to_string(&mut buffer).unwrap();
+
+        assert_eq!(buffer, String::from("coucoutoiBlabla"));
     }
 
     #[test]

@@ -2,7 +2,7 @@
 [![Version](https://img.shields.io/crates/v/chicon.svg)](https://crates.io/crates/chicon)
 [![Documentation](https://docs.rs/chicon/badge.svg)](https://docs.rs/chicon)
 
-A file abstraction system for Rust. Chicon is a library intends to provide a simple, uniform and universal API interacting with any filesystem, as an abstraction layer providing traits, types and methods. The main `FileSystem` trait is based on the usage of [`std::fs::*`](https://doc.rust-lang.org/stable/std/fs/) in order to be transparent when you want to switch from a physical filesystem to a virtual one like S3, SFTP, SSH. It is suitable for any situation when you need to store directories and files on different filesystems.
+A file abstraction system for Rust. Chicon is a library intends to provide a simple, uniform and universal API interacting with any filesystem, as an abstraction layer providing traits, types and methods. The main `FileSystem` trait is based on the usage of [`std::fs::*`](https://doc.rust-lang.org/stable/std/fs/) in order to be transparent when you want to switch from a physical filesystem to a virtual one like S3, SFTP, SSH and in-memory. It is suitable for any situation when you need to store directories and files on different filesystems. Memory file system can be appropriate when you write your tests in order to have faster behavior than an IO filesystem.
 
 ## Examples
 
@@ -96,3 +96,4 @@ std::fs::remove_dir_all("testreaddir").unwrap(); // If you want to remove dir an
 
 + implement FS with swift
 + implement seek trait for files
++ refactor with more idiomatic Rust stuff
