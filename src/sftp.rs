@@ -97,7 +97,7 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
         sftp.setstat(path, stat).map_err(ChiconError::from)
     }
 
-    fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<Self::File, Self::FSError> {
+    fn create_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError> {
         let path = path.as_ref();
         let ssh_session = SSHSession::new(
             self.addr.clone(),
@@ -122,7 +122,7 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
         ))
     }
 
-    fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+    fn create_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
         let ssh_session = SSHSession::new(
             self.addr.clone(),
             &self.username,
@@ -138,7 +138,7 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
             .map_err(ChiconError::from)
     }
 
-    fn create_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+    fn create_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
         self.create_dir(path).map(|_| ()).map_err(ChiconError::from)
     }
 
@@ -186,7 +186,7 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
         Ok(dir_entries.into_iter().map(SFTPDirEntry::from).collect())
     }
 
-    fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+    fn remove_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
         let ssh_session = SSHSession::new(
             self.addr.clone(),
             &self.username,
@@ -200,7 +200,7 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
         sftp.unlink(path.as_ref()).map_err(ChiconError::from)
     }
 
-    fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+    fn remove_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
         let ssh_session = SSHSession::new(
             self.addr.clone(),
             &self.username,
@@ -214,7 +214,7 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
         sftp.rmdir(path.as_ref()).map_err(ChiconError::from)
     }
 
-    fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+    fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
         let path = path.as_ref();
 
         let dir_entries = self.read_dir(path)?;
@@ -228,7 +228,7 @@ impl<'a> FileSystem for SFTPFileSystem<'a> {
         self.remove_dir(path)
     }
 
-    fn rename<P: AsRef<Path>>(&mut self, from: P, to: P) -> Result<(), Self::FSError> {
+    fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Result<(), Self::FSError> {
         let ssh_session = SSHSession::new(
             self.addr.clone(),
             &self.username,
@@ -364,7 +364,7 @@ mod tests {
 
     #[test]
     fn test_create_dir() {
-        let mut sftp_fs = SFTPFileSystem::new(
+        let sftp_fs = SFTPFileSystem::new(
             String::from("127.0.0.1:2222"),
             env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
             None,
@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn test_read_dir() {
-        let mut sftp_fs = SFTPFileSystem::new(
+        let sftp_fs = SFTPFileSystem::new(
             String::from("127.0.0.1:2222"),
             env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
             None,
@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_full_flow() {
-        let mut sftp_fs = SFTPFileSystem::new(
+        let sftp_fs = SFTPFileSystem::new(
             String::from("127.0.0.1:2222"),
             env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
             None,
@@ -426,7 +426,7 @@ mod tests {
 
     #[test]
     fn test_remove_dir_all() {
-        let mut sftp_fs = SFTPFileSystem::new(
+        let sftp_fs = SFTPFileSystem::new(
             String::from("127.0.0.1:2222"),
             env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
             None,

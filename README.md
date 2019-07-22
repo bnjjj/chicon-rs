@@ -1,4 +1,6 @@
+
 # Chicon
+
 [![Version](https://img.shields.io/crates/v/chicon.svg)](https://crates.io/crates/chicon)
 [![Documentation](https://docs.rs/chicon/badge.svg)](https://docs.rs/chicon)
 

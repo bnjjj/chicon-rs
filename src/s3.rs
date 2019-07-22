@@ -54,7 +54,7 @@ impl FileSystem for S3FileSystem {
         unimplemented!()
     }
 
-    fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<Self::File, Self::FSError> {
+    fn create_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError> {
         let path: &Path = path.as_ref();
         let filename: String = path.to_string_lossy().into_owned();
         if filename.contains("../") {
@@ -81,7 +81,7 @@ impl FileSystem for S3FileSystem {
         ))
     }
 
-    fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+    fn create_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
         let path: &Path = path.as_ref();
         let mut dir: String = path.to_string_lossy().into_owned();
         if dir.contains("../") {
@@ -105,7 +105,7 @@ impl FileSystem for S3FileSystem {
             .map_err(ChiconError::from)
     }
 
-    fn create_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+    fn create_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
         self.create_dir(path)
     }
 
@@ -166,7 +166,7 @@ impl FileSystem for S3FileSystem {
         Ok(dir_entries)
     }
 
-    fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+    fn remove_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
         let path: &Path = path.as_ref();
         let filename = path.to_string_lossy().into_owned();
         if filename.contains("../") {
@@ -185,7 +185,7 @@ impl FileSystem for S3FileSystem {
             .map_err(ChiconError::from)
     }
 
-    fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+    fn remove_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
         let path: &Path = path.as_ref();
         let dir_name = path.to_string_lossy().into_owned();
         if dir_name.contains("../") {
@@ -200,7 +200,7 @@ impl FileSystem for S3FileSystem {
         self.remove_dir_all(path)
     }
 
-    fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Self::FSError> {
+    fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
         let path: &Path = path.as_ref();
         let dir_name = path.to_string_lossy().into_owned();
         if dir_name.contains("../") {
@@ -220,7 +220,7 @@ impl FileSystem for S3FileSystem {
             .map_err(ChiconError::from)
     }
 
-    fn rename<P: AsRef<Path>>(&mut self, from: P, to: P) -> Result<(), Self::FSError> {
+    fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Result<(), Self::FSError> {
         let from: &Path = from.as_ref();
         let from_filename: String = from.to_string_lossy().into_owned();
         if from_filename.contains("../") {
@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn test_create_file() {
-        let mut s3_fs = S3FileSystem::new(
+        let s3_fs = S3FileSystem::new(
             String::from("testest"),
             String::from("testtest"),
             String::from("test"),
@@ -345,7 +345,7 @@ mod tests {
 
     #[test]
     fn test_open_file() {
-        let mut s3_fs = S3FileSystem::new(
+        let s3_fs = S3FileSystem::new(
             String::from("testest"),
             String::from("testtest"),
             String::from("test"),
@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_rename_file() {
-        let mut s3_fs = S3FileSystem::new(
+        let s3_fs = S3FileSystem::new(
             String::from("testest"),
             String::from("testtest"),
             String::from("test"),
@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_read_dir() {
-        let mut s3_fs = S3FileSystem::new(
+        let s3_fs = S3FileSystem::new(
             String::from("testest"),
             String::from("testtest"),
             String::from("test"),
@@ -424,7 +424,7 @@ mod tests {
 
     #[test]
     fn test_read_dir_empty() {
-        let mut s3_fs = S3FileSystem::new(
+        let s3_fs = S3FileSystem::new(
             String::from("testest"),
             String::from("testtest"),
             String::from("test"),
@@ -445,7 +445,7 @@ mod tests {
 
     #[test]
     fn test_read_dir_empty_bis() {
-        let mut s3_fs = S3FileSystem::new(
+        let s3_fs = S3FileSystem::new(
             String::from("testest"),
             String::from("testtest"),
             String::from("test"),
@@ -461,7 +461,7 @@ mod tests {
 
     #[test]
     fn test_remove_dir_not_empty() {
-        let mut s3_fs = S3FileSystem::new(
+        let s3_fs = S3FileSystem::new(
             String::from("testest"),
             String::from("testtest"),
             String::from("test"),
@@ -476,7 +476,7 @@ mod tests {
 
     #[test]
     fn test_read_dir_with_dot() {
-        let mut s3_fs = S3FileSystem::new(
+        let s3_fs = S3FileSystem::new(
             String::from("testest"),
             String::from("testtest"),
             String::from("test"),
@@ -496,7 +496,7 @@ mod tests {
 
     #[test]
     fn test_read_dir_recurse() {
-        let mut s3_fs = S3FileSystem::new(
+        let s3_fs = S3FileSystem::new(
             String::from("testest"),
             String::from("testtest"),
             String::from("test"),
