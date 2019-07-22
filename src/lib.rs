@@ -130,6 +130,8 @@ extern crate env_logger;
 extern crate osauth;
 extern crate serde;
 extern crate tokio;
+#[macro_use]
+extern crate failure;
 
 mod error;
 mod mem;
