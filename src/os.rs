@@ -1,4 +1,4 @@
-use std::fs::{File, Permissions};
+use std::fs::{File, OpenOptions, Permissions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -34,7 +34,13 @@ impl FileSystem for OsFileSystem {
     }
 
     fn open_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError> {
-        Ok(OsFile::from(File::open(path)?))
+        Ok(OsFile::from(
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .append(true)
+                .open(path)?,
+        ))
     }
 
     fn read_dir<P: AsRef<Path>>(&self, path: P) -> Result<Vec<Self::DirEntry>, Self::FSError> {
@@ -115,7 +121,6 @@ impl From<std::fs::DirEntry> for OsDirEntry {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,10 +128,21 @@ mod tests {
     #[test]
     fn test_create_file() {
         let os_fs = OsFileSystem::new();
-        os_fs.create_file("test.test").unwrap();
+        {
+            let mut file = os_fs.create_file("test.test").unwrap();
 
-        assert!(std::fs::read("test.test").is_ok());
+            assert!(std::fs::read("test.test").is_ok());
 
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut new_file = os_fs.open_file("test.test").unwrap();
+        let mut content = String::new();
+        new_file.read_to_string(&mut content).unwrap();
+
+        assert_eq!(String::from("coucoutoi"), content);
         std::fs::remove_file("test.test").unwrap();
     }
 
@@ -143,6 +159,8 @@ mod tests {
     #[test]
     fn test_create_dir_all() {
         let os_fs = OsFileSystem::new();
+        os_fs.create_dir_all("testdirall/test").unwrap();
+        os_fs.create_file("testdirall/test/test.test").unwrap();
         os_fs.create_dir_all("testdirall/test").unwrap();
 
         assert!(std::fs::read_dir("testdirall/test").is_ok());

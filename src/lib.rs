@@ -7,7 +7,9 @@
 //!
 //! The main `FileSystem` trait is based on the usage of `std::fs::*`
 //! in order to be transparent when you want to switch from a physical filesystem
-//! to a virtual filesystem like S3, SFTP, SSH
+//! to a virtual filesystem like S3, SFTP, SSH, in-memory.
+//!
+//! Memory file system can be appropriate when you write your tests in order to have faster behavior than an IO filesystem.
 //!
 //! It is suitable for any situation when you need to store directories and files
 //! on different filesystems.
@@ -123,19 +125,28 @@ extern crate rusoto_s3;
 extern crate ssh2;
 #[macro_use]
 extern crate url;
+extern crate chrono;
+extern crate env_logger;
+extern crate osauth;
+extern crate serde;
+extern crate tokio;
+#[macro_use]
+extern crate failure;
 
 mod error;
+mod mem;
 mod os;
 mod s3;
-
 mod sftp;
 mod ssh;
-mod swift;
+// mod swift;
+
 use std::fs::Permissions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 pub use error::ChiconError;
+pub use mem::*;
 pub use os::*;
 pub use s3::{S3DirEntry, S3File, S3FileSystem};
 pub use sftp::*;
@@ -143,7 +154,7 @@ pub use ssh::*;
 
 ///
 /// The FileSystem trait needs to be implemented if you want a fully available abstract filesystem.
-/// For now we have few implementations as OSFileSystem, S3FileSystem, SFTPFileSystem, SSHFileSystem
+/// For now we have few implementations as OSFileSystem, S3FileSystem, SFTPFileSystem, SSHFileSystem, MemFileSystem
 ///
 pub trait FileSystem {
     type FSError;
