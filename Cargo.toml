@@ -1,6 +1,6 @@
 [package]
 name = "chicon"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Benjamin Coenen <benjamin.coenen@hotmail.com>"]
 edition = "2018"
 description = "A file abstraction system for Rust"
