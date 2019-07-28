@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::Permissions;
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use url::percent_encoding::{utf8_percent_encode, SIMPLE_ENCODE_SET};
 
@@ -254,6 +254,8 @@ pub struct S3File {
     bucket: String,
     content: Vec<u8>,
     s3_client: S3Client,
+    offset: u64,
+    bytes_read: u64,
 }
 impl File for S3File {
     type FSError = ChiconError;
@@ -272,8 +274,17 @@ impl File for S3File {
 
 impl Read for S3File {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        let mut content_slice = self.content.as_slice();
+        let mut content_slice = if self.bytes_read == 0 {
+            if self.offset >= self.content.len() as u64 {
+                return Ok(0);
+            }
+            &self.content[(self.offset as usize)..]
+        } else {
+            self.content.as_slice()
+        };
         let nb = content_slice.read(buf)?;
+
+        self.bytes_read += nb as u64;
         self.content = content_slice.to_vec();
         Ok(nb)
     }
@@ -286,6 +297,38 @@ impl Write for S3File {
         self.content.flush()
     }
 }
+impl Seek for S3File {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, std::io::Error> {
+        let err = std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid argument: bad cursor value",
+        );
+        match pos {
+            SeekFrom::Current(nb) if self.offset as i64 + nb < self.content.len() as i64 => {
+                let cursor: i64 = self.offset as i64 + nb;
+                if cursor < 0 {
+                    return Err(err);
+                }
+                self.offset = cursor as u64;
+                Ok(cursor as u64)
+            }
+            SeekFrom::End(nb) if nb >= 0 => {
+                self.offset = (self.content.len() as u64) + nb as u64;
+                Ok(self.offset)
+            }
+            SeekFrom::End(nb) if (self.content.len() as i64) + nb >= 0 => {
+                let cursor: i64 = (self.content.len() as i64) + nb;
+                self.offset = cursor as u64;
+                Ok(cursor as u64)
+            }
+            SeekFrom::Start(nb) if nb < self.content.len() as u64 => {
+                self.offset = nb;
+                Ok(nb)
+            }
+            _ => Err(err),
+        }
+    }
+}
 
 impl S3File {
     fn new(bucket: String, key: String, s3_client: S3Client) -> Self {
@@ -294,6 +337,8 @@ impl S3File {
             key,
             content: Vec::new(),
             s3_client,
+            offset: 0,
+            bytes_read: 0,
         }
     }
 }
