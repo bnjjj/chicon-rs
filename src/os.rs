@@ -1,5 +1,5 @@
 use std::fs::{File, OpenOptions, Permissions};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use crate::{DirEntry, File as FsFile, FileSystem, FileType};
@@ -88,6 +88,11 @@ impl Write for OsFile {
         self.0.flush()
     }
 }
+impl Seek for OsFile {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, std::io::Error> {
+        self.0.seek(pos)
+    }
+}
 impl From<File> for OsFile {
     fn from(file: File) -> Self {
         OsFile(file)
@@ -138,12 +143,60 @@ mod tests {
             file.sync_all().unwrap();
         }
 
-        let mut new_file = os_fs.open_file("test.test").unwrap();
         let mut content = String::new();
-        new_file.read_to_string(&mut content).unwrap();
-
+        {
+            let mut new_file = os_fs.open_file("test.test").unwrap();
+            new_file.read_to_string(&mut content).unwrap();
+        }
         assert_eq!(String::from("coucoutoi"), content);
+
         std::fs::remove_file("test.test").unwrap();
+    }
+
+    #[test]
+    fn test_seek_file() {
+        let os_fs = OsFileSystem::new();
+        {
+            let mut file = os_fs.create_file("testseek.test").unwrap();
+
+            assert!(std::fs::read("testseek.test").is_ok());
+
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut content = String::new();
+        {
+            let mut new_file = os_fs.open_file("testseek.test").unwrap();
+            new_file.seek(SeekFrom::Start(2)).unwrap();
+            new_file.read_to_string(&mut content).unwrap();
+        }
+        assert_eq!(String::from("ucoutoi"), content);
+
+        std::fs::remove_file("testseek.test").unwrap();
+    }
+
+    #[test]
+    fn test_seek_end_file() {
+        let os_fs = OsFileSystem::new();
+        {
+            let mut file = os_fs.create_file("testseekend.test").unwrap();
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut content = String::new();
+        {
+            let mut new_file = os_fs.open_file("testseekend.test").unwrap();
+            assert_eq!(new_file.seek(SeekFrom::End(2)).unwrap(), 11);
+            assert_eq!(new_file.seek(SeekFrom::End(-2)).unwrap(), 7);
+            new_file.read_to_string(&mut content).unwrap();
+        }
+        assert_eq!(String::from("oi"), content);
+
+        std::fs::remove_file("testseekend.test").unwrap();
     }
 
     #[test]

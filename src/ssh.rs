@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 use std::fs::Permissions;
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::TcpStream;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -359,6 +359,8 @@ pub struct SSHFile<'a> {
     passphrase: Option<&'a str>,
     private_key: PathBuf,
     public_key: PathBuf,
+    offset: u64,
+    bytes_read: u64,
 }
 impl<'a> SSHFile<'a> {
     fn new<P>(
@@ -384,6 +386,8 @@ impl<'a> SSHFile<'a> {
             private_key: PathBuf::from(private_key),
             public_key: PathBuf::from(public_key),
             addr,
+            offset: 0,
+            bytes_read: 0,
         }
     }
 }
@@ -418,8 +422,17 @@ impl<'a> File for SSHFile<'a> {
 
 impl<'a> Read for SSHFile<'a> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        let mut content_slice = self.content.as_slice();
+        let mut content_slice = if self.bytes_read == 0 {
+            if self.offset >= self.content.len() as u64 {
+                return Ok(0);
+            }
+            &self.content[(self.offset as usize)..]
+        } else {
+            self.content.as_slice()
+        };
         let nb = content_slice.read(buf)?;
+
+        self.bytes_read += nb as u64;
         self.content = content_slice.to_vec();
         Ok(nb)
     }
@@ -430,6 +443,38 @@ impl<'a> Write for SSHFile<'a> {
     }
     fn flush(&mut self) -> Result<(), std::io::Error> {
         self.content.flush()
+    }
+}
+impl<'a> Seek for SSHFile<'a> {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, std::io::Error> {
+        let err = std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid argument: bad cursor value",
+        );
+        match pos {
+            SeekFrom::Current(nb) if self.offset as i64 + nb < self.content.len() as i64 => {
+                let cursor: i64 = self.offset as i64 + nb;
+                if cursor < 0 {
+                    return Err(err);
+                }
+                self.offset = cursor as u64;
+                Ok(cursor as u64)
+            }
+            SeekFrom::End(nb) if nb >= 0 => {
+                self.offset = (self.content.len() as u64) + nb as u64;
+                Ok(self.offset)
+            }
+            SeekFrom::End(nb) if (self.content.len() as i64) + nb >= 0 => {
+                let cursor: i64 = (self.content.len() as i64) + nb;
+                self.offset = cursor as u64;
+                Ok(cursor as u64)
+            }
+            SeekFrom::Start(nb) if nb < self.content.len() as u64 => {
+                self.offset = nb;
+                Ok(nb)
+            }
+            _ => Err(err),
+        }
     }
 }
 
@@ -551,5 +596,59 @@ mod tests {
             .unwrap();
 
         ssh_fs.remove_dir_all("share/testsshremovedirtest").unwrap();
+    }
+
+    #[test]
+    fn test_seek_file() {
+        let ssh_fs = SSHFileSystem::new(
+            String::from("127.0.0.1:22"),
+            env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
+            None,
+            env::var("SSH_PRIVATE_KEY").expect("SSH_PRIVATE_KEY environment variable must be set"),
+            env::var("SSH_PUBLIC_KEY").expect("SSH_PUBLIC_KEY environment variable must be set"),
+        );
+        {
+            let mut file = ssh_fs.create_file("testseek.test").unwrap();
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut content = String::new();
+        {
+            let mut new_file = ssh_fs.open_file("testseek.test").unwrap();
+            new_file.seek(SeekFrom::Start(2)).unwrap();
+            new_file.read_to_string(&mut content).unwrap();
+        }
+        assert_eq!(String::from("ucoutoi"), content);
+
+        ssh_fs.remove_file("testseek.test").unwrap();
+    }
+
+    #[test]
+    fn test_seek_end_file() {
+        let ssh_fs = SSHFileSystem::new(
+            String::from("127.0.0.1:22"),
+            env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
+            None,
+            env::var("SSH_PRIVATE_KEY").expect("SSH_PRIVATE_KEY environment variable must be set"),
+            env::var("SSH_PUBLIC_KEY").expect("SSH_PUBLIC_KEY environment variable must be set"),
+        );
+        {
+            let mut file = ssh_fs.create_file("testseekend.test").unwrap();
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut content = String::new();
+        {
+            let mut new_file = ssh_fs.open_file("testseekend.test").unwrap();
+            assert_eq!(new_file.seek(SeekFrom::End(2)).unwrap(), 11);
+            assert_eq!(new_file.seek(SeekFrom::End(-2)).unwrap(), 7);
+            new_file.read_to_string(&mut content).unwrap();
+        }
+        assert_eq!(String::from("oi"), content);
+        ssh_fs.remove_file("testseekend.test").unwrap();
     }
 }

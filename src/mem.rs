@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::Permissions;
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -9,7 +9,7 @@ use std::rc::Rc;
 use crate::error::ChiconError;
 use crate::{DirEntry, File, FileSystem, FileType};
 
-/// Structure implementing `FileSystem` trait to store on an in memory filesystem, for now please only for testing use cases ! Need to be benchmarked before production use
+/// Structure implementing `FileSystem` trait to store on an in memory filesystem
 #[derive(Default, Clone)]
 pub struct MemFileSystem {
     children: RefCell<HashMap<String, MemDirEntry>>,
@@ -133,6 +133,8 @@ impl MemFileSystem {
                     content: Vec::new(),
                     perm: Permissions::from_mode(0o755),
                     complete_path,
+                    offset: 0,
+                    bytes_read: 0,
                 };
                 let file = MemFile(Rc::new(RefCell::new(file_internal)));
 
@@ -306,6 +308,8 @@ struct MemFileInternal {
     name: String,
     content: Vec<u8>,
     perm: Permissions,
+    offset: u64,
+    bytes_read: u64,
 }
 
 /// Structure implementing File trait to represent a file on an in memory filesystem
@@ -335,18 +339,24 @@ impl Read for MemFile {
                 .content;
             cloned_content = content.clone();
         }
-        let mut content_slice = cloned_content.as_slice();
+        let mut mem_file = self.0.try_borrow_mut().map_err(|err| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("cannot borrow mut the file to fill the content : {:?}", err),
+            )
+        })?;
+        let mut content_slice = if mem_file.bytes_read == 0 {
+            if mem_file.offset >= cloned_content.len() as u64 {
+                return Ok(0);
+            }
+            &cloned_content[(mem_file.offset as usize)..]
+        } else {
+            cloned_content.as_slice()
+        };
         let nb = content_slice.read(buf)?;
 
-        self.0
-            .try_borrow_mut()
-            .map_err(|err| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("cannot borrow mut the file to fill the content : {:?}", err),
-                )
-            })?
-            .content = content_slice.to_vec();
+        mem_file.bytes_read += nb as u64;
+        mem_file.content = content_slice.to_vec();
         Ok(nb)
     }
 }
@@ -374,6 +384,47 @@ impl Write for MemFile {
             })?
             .content
             .flush()
+    }
+}
+impl Seek for MemFile {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, std::io::Error> {
+        let mut mem_file = self.0.try_borrow_mut().map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "cannot borrow mut the file to write",
+            )
+        })?;
+
+        let err = std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid argument: bad cursor value",
+        );
+        match pos {
+            SeekFrom::Current(nb)
+                if mem_file.offset as i64 + nb < mem_file.content.len() as i64 =>
+            {
+                let cursor: i64 = mem_file.offset as i64 + nb;
+                if cursor < 0 {
+                    return Err(err);
+                }
+                mem_file.offset = cursor as u64;
+                Ok(cursor as u64)
+            }
+            SeekFrom::End(nb) if nb >= 0 => {
+                mem_file.offset = (mem_file.content.len() as u64) + nb as u64;
+                Ok(mem_file.offset)
+            }
+            SeekFrom::End(nb) if (mem_file.content.len() as i64) + nb >= 0 => {
+                let cursor: i64 = (mem_file.content.len() as i64) + nb;
+                mem_file.offset = cursor as u64;
+                Ok(cursor as u64)
+            }
+            SeekFrom::Start(nb) if nb < mem_file.content.len() as u64 => {
+                mem_file.offset = nb;
+                Ok(nb)
+            }
+            _ => Err(err),
+        }
     }
 }
 
@@ -513,6 +564,8 @@ impl MemDirectory {
                         content: Vec::new(),
                         perm: Permissions::from_mode(0o755),
                         complete_path,
+                        offset: 0,
+                        bytes_read: 0,
                     };
                     let file = MemFile(Rc::new(RefCell::new(file_internal)));
 
@@ -818,6 +871,45 @@ mod tests {
         file.read_to_string(&mut buffer).unwrap();
 
         assert_eq!(buffer, String::from("coucoutoiBlabla"));
+    }
+
+    #[test]
+    fn test_seek_file() {
+        let mem_fs = MemFileSystem::new();
+        {
+            let mut file = mem_fs.create_file("testseek.test").unwrap();
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut content = String::new();
+        {
+            let mut new_file = mem_fs.open_file("testseek.test").unwrap();
+            new_file.seek(SeekFrom::Start(2)).unwrap();
+            new_file.read_to_string(&mut content).unwrap();
+        }
+        assert_eq!(String::from("ucoutoi"), content);
+    }
+
+    #[test]
+    fn test_seek_end_file() {
+        let mem_fs = MemFileSystem::new();
+        {
+            let mut file = mem_fs.create_file("testseek.test").unwrap();
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut content = String::new();
+        {
+            let mut new_file = mem_fs.open_file("testseek.test").unwrap();
+            assert_eq!(new_file.seek(SeekFrom::End(2)).unwrap(), 11);
+            assert_eq!(new_file.seek(SeekFrom::End(-2)).unwrap(), 7);
+            new_file.read_to_string(&mut content).unwrap();
+        }
+        assert_eq!(String::from("oi"), content);
     }
 
     #[test]

@@ -19,7 +19,7 @@
 //! ## Use S3 as backend to create a file
 //!
 //! ```should_panic
-//! use std::io::{Read, Write};
+//! use std::io::prelude::*;
 //!
 //! use chicon::{DirEntry, File, FileSystem, S3FileSystem};
 //!
@@ -47,7 +47,7 @@
 //! You just need to change from `S3FileSystem::new` to `SFTPFileSystem::new`.
 //!
 //! ```should_panic
-//! use std::io::{Read, Write};
+//! use std::io::prelude::*;
 //!
 //! use chicon::{DirEntry, File, FileSystem, SFTPFileSystem};
 //!
@@ -72,7 +72,7 @@
 //! ## Use SSH as backend to read a file
 //!
 //! ```should_panic
-//! use std::io::{Read, Write};
+//! use std::io::prelude::*;
 //!
 //! use chicon::{DirEntry, File, FileSystem, SSHFileSystem};
 //!
@@ -94,7 +94,7 @@
 //! ## Use OS (local filesystem) as backend to create and read a directory
 //!
 //! ```should_panic
-//! use std::io::{Read, Write};
+//! use std::io::prelude::*;
 //!
 //! use chicon::{DirEntry, File, FileType, FileSystem, OsFileSystem};
 //!
@@ -119,7 +119,7 @@
 //!
 //! If you need more examples, check-out all tests in the source code on Github
 //!
-// #![doc(html_logo_url = "./chicon_logo.png")]
+#![doc(html_logo_url = "https://github.com/bnjjj/chicon-rs/blob/master/chicon_logo.png?raw=true")]
 extern crate rusoto_core;
 extern crate rusoto_s3;
 extern crate ssh2;
@@ -142,7 +142,7 @@ mod ssh;
 // mod swift;
 
 use std::fs::Permissions;
-use std::io::{Read, Write};
+use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 pub use error::ChiconError;
@@ -174,7 +174,7 @@ pub trait FileSystem {
 }
 
 /// Trait that represent a file inside our FileSystem. Associated type `File` in our `FileSystem` trait must implement this trait.
-pub trait File: Read + Write {
+pub trait File: Read + Write + Seek {
     type FSError;
 
     fn sync_all(&mut self) -> Result<(), Self::FSError>;

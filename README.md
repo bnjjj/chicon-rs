@@ -11,7 +11,7 @@ A file abstraction system for Rust. Chicon is a library intends to provide a sim
 ### Use S3 as backend to create a file
 
 ```rust
-use std::io::{Read, Write};
+use std::io::prelude::*;
 use chicon::{DirEntry, File, FileSystem, S3FileSystem};
 let s3_fs = S3FileSystem::new(
      String::from("my_access_key_id"),
@@ -34,7 +34,7 @@ s3_fs.remove_file("test.test").unwrap(); // If you want to delete the file
 > You just need to change from `S3FileSystem::new` to `SFTPFileSystem::new`.
 
 ```rust
-use std::io::{Read, Write};
+use std::io::prelude::*;
 use chicon::{DirEntry, File, FileSystem, SFTPFileSystem};
 let sftp_fs = SFTPFileSystem::new(
     String::from("127.0.0.1:2222"), // host:port
@@ -54,7 +54,7 @@ assert_eq!(content, String::from("here is a test"));
 ### Use SSH as backend to read a file
 
 ```rust
-use std::io::{Read, Write};
+use std::io::prelude::*;
 use chicon::{DirEntry, File, FileSystem, SSHFileSystem};
 let ssh_fs = SSHFileSystem::new(
     String::from("127.0.0.1:2222"), // host:port
@@ -72,7 +72,7 @@ println!("Here is the content of your file: {}", buffer);
 ### Use OS (local filesystem) as backend to create and read a directory
 
 ```rust
-use std::io::{Read, Write};
+use std::io::prelude::*;
 use chicon::{DirEntry, File, FileType, FileSystem, OsFileSystem};
 let os_fs = OsFileSystem::new();
 os_fs.create_dir_all("testreaddir/test").unwrap();
@@ -93,9 +93,7 @@ std::fs::remove_dir_all("testreaddir").unwrap(); // If you want to remove dir an
 
 > If you need more examples, check-out all tests in the source code on Github
 
+## Roadmap
 
-## Roadmap:
-
-+ implement FS with swift
-+ implement seek trait for files
++ implement swift as a new backend
 + refactor with more idiomatic Rust stuff
