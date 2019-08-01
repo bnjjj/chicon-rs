@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use rusoto_core::RusotoError;
 use rusoto_s3::{
-    CopyObjectError, DeleteObjectError, GetObjectError, ListObjectsV2Error, PutObjectError,
+    CopyObjectError, DeleteObjectError, DeleteObjectsError, GetObjectError, ListObjectsV2Error, PutObjectError,
 };
 use ssh2;
 
@@ -34,6 +34,8 @@ pub enum ChiconError {
     RusotoPutObjectError(RusotoError<PutObjectError>),
     #[fail(display = "Rusoto DeleteObjectError error: {:?}", _0)]
     RusotoDeleteObjectError(RusotoError<DeleteObjectError>),
+    #[fail(display = "Rusoto DeleteObjectsError error: {:?}", _0)]
+    RusotoDeleteObjectsError(RusotoError<DeleteObjectsError>),
     #[fail(display = "Rusoto CopyObjectError error: {:?}", _0)]
     RusotoCopyObjectError(RusotoError<CopyObjectError>),
     #[fail(display = "Rusoto ListObjectsV2Error error: {:?}", _0)]
@@ -74,6 +76,11 @@ from_error!(
     RusotoError<DeleteObjectError>,
     ChiconError,
     ChiconError::RusotoDeleteObjectError
+);
+from_error!(
+    RusotoError<DeleteObjectsError>,
+    ChiconError,
+    ChiconError::RusotoDeleteObjectsError
 );
 from_error!(
     RusotoError<CopyObjectError>,
