@@ -8,8 +8,8 @@ use rusoto_core::{
     credential::EnvironmentProvider, region::Region, request::HttpClient, ByteStream,
 };
 use rusoto_s3::{
-    CopyObjectRequest, DeleteObjectRequest, GetObjectRequest, ListObjectsV2Request,
-    PutObjectRequest, S3Client, S3,
+    CopyObjectRequest, Delete, DeleteObjectRequest, DeleteObjectsRequest, GetObjectRequest,
+    ListObjectsV2Request, ObjectIdentifier, PutObjectRequest, S3Client, S3,
 };
 
 use crate::{error::ChiconError, DirEntry, File, FileSystem, FileType};
@@ -197,7 +197,17 @@ impl FileSystem for S3FileSystem {
             return Err(ChiconError::DirectoryNotEmpty);
         }
 
-        self.remove_dir_all(path)
+        let req = DeleteObjectRequest {
+            bucket: self.bucket.clone(),
+            key: path.to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+
+        self.s3_client
+            .delete_object(req)
+            .sync()
+            .map(|_| ())
+            .map_err(ChiconError::from)
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
@@ -207,14 +217,29 @@ impl FileSystem for S3FileSystem {
             return Err(ChiconError::RelativePath);
         }
 
-        let req = DeleteObjectRequest {
+        let dir_entries = self.read_dir(path)?;
+        if dir_entries.is_empty() {
+            return self.remove_dir(path);
+        }
+
+        let mut elt_to_delete: Vec<ObjectIdentifier> = Vec::with_capacity(dir_entries.len());
+        for elt in dir_entries {
+            elt_to_delete.push(ObjectIdentifier {
+                key: elt.path()?.to_string_lossy().into_owned(),
+                version_id: None,
+            });
+        }
+        let req = DeleteObjectsRequest {
             bucket: self.bucket.clone(),
-            key: path.to_string_lossy().into_owned(),
+            delete: Delete {
+                objects: elt_to_delete,
+                quiet: None,
+            },
             ..Default::default()
         };
 
         self.s3_client
-            .delete_object(req)
+            .delete_objects(req)
             .sync()
             .map(|_| ())
             .map_err(ChiconError::from)
@@ -566,5 +591,59 @@ mod tests {
         );
 
         s3_fs.remove_dir_all("testreaddirbis").unwrap();
+    }
+
+    #[test]
+    fn test_seek_file() {
+        let s3_fs = S3FileSystem::new(
+            String::from("testest"),
+            String::from("testtest"),
+            String::from("test"),
+            String::from("local"),
+            String::from("http://127.0.0.1"),
+        );
+        {
+            let mut file = s3_fs.create_file("testseek.test").unwrap();
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut content = String::new();
+        {
+            let mut new_file = s3_fs.open_file("testseek.test").unwrap();
+            new_file.seek(SeekFrom::Start(2)).unwrap();
+            new_file.read_to_string(&mut content).unwrap();
+        }
+        assert_eq!(String::from("ucoutoi"), content);
+
+        s3_fs.remove_file("testseek.test").unwrap();
+    }
+
+    #[test]
+    fn test_seek_end_file() {
+        let s3_fs = S3FileSystem::new(
+            String::from("testest"),
+            String::from("testtest"),
+            String::from("test"),
+            String::from("local"),
+            String::from("http://127.0.0.1"),
+        );
+        {
+            let mut file = s3_fs.create_file("testseekend.test").unwrap();
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut content = String::new();
+        {
+            let mut new_file = s3_fs.open_file("testseekend.test").unwrap();
+            assert_eq!(new_file.seek(SeekFrom::End(2)).unwrap(), 11);
+            assert_eq!(new_file.seek(SeekFrom::End(-2)).unwrap(), 7);
+            new_file.read_to_string(&mut content).unwrap();
+        }
+        assert_eq!(String::from("oi"), content);
+        s3_fs.remove_file("testseekend.test").unwrap();
     }
 }

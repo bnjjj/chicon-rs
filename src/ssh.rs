@@ -597,4 +597,58 @@ mod tests {
 
         ssh_fs.remove_dir_all("share/testsshremovedirtest").unwrap();
     }
+
+    #[test]
+    fn test_seek_file() {
+        let ssh_fs = SSHFileSystem::new(
+            String::from("127.0.0.1:22"),
+            env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
+            None,
+            env::var("SSH_PRIVATE_KEY").expect("SSH_PRIVATE_KEY environment variable must be set"),
+            env::var("SSH_PUBLIC_KEY").expect("SSH_PUBLIC_KEY environment variable must be set"),
+        );
+        {
+            let mut file = ssh_fs.create_file("testseek.test").unwrap();
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut content = String::new();
+        {
+            let mut new_file = ssh_fs.open_file("testseek.test").unwrap();
+            new_file.seek(SeekFrom::Start(2)).unwrap();
+            new_file.read_to_string(&mut content).unwrap();
+        }
+        assert_eq!(String::from("ucoutoi"), content);
+
+        ssh_fs.remove_file("testseek.test").unwrap();
+    }
+
+    #[test]
+    fn test_seek_end_file() {
+        let ssh_fs = SSHFileSystem::new(
+            String::from("127.0.0.1:22"),
+            env::var("SSH_USER").expect("SSH_USER environment variable must be set"),
+            None,
+            env::var("SSH_PRIVATE_KEY").expect("SSH_PRIVATE_KEY environment variable must be set"),
+            env::var("SSH_PUBLIC_KEY").expect("SSH_PUBLIC_KEY environment variable must be set"),
+        );
+        {
+            let mut file = ssh_fs.create_file("testseekend.test").unwrap();
+            file.write_all(String::from("coucoutoi").as_bytes())
+                .unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut content = String::new();
+        {
+            let mut new_file = ssh_fs.open_file("testseekend.test").unwrap();
+            assert_eq!(new_file.seek(SeekFrom::End(2)).unwrap(), 11);
+            assert_eq!(new_file.seek(SeekFrom::End(-2)).unwrap(), 7);
+            new_file.read_to_string(&mut content).unwrap();
+        }
+        assert_eq!(String::from("oi"), content);
+        ssh_fs.remove_file("testseekend.test").unwrap();
+    }
 }
