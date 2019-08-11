@@ -117,7 +117,7 @@
 //! std::fs::remove_dir_all("testreaddir").unwrap(); // If you want to remove dir and all entries inside
 //! ```
 //!
-//! If you need more examples, check-out all tests in the source code on Github
+//! If you need more examples, check-out all tests in the source code on GitHub
 //!
 #![doc(html_logo_url = "https://github.com/bnjjj/chicon-rs/blob/master/chicon_logo.png?raw=true")]
 extern crate rusoto_core;

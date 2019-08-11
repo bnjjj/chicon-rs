@@ -91,7 +91,7 @@ assert_eq!(
 std::fs::remove_dir_all("testreaddir").unwrap(); // If you want to remove dir and all entries inside
 ```
 
-> If you need more examples, check-out all tests in the source code on Github
+> If you need more examples, check-out all tests in the source code on GitHub
 
 ## Roadmap
 
