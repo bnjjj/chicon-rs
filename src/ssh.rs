@@ -11,7 +11,7 @@ use crate::error::ChiconError;
 use crate::{DirEntry, File, FileSystem, FileType};
 
 struct SSHSession {
-    // Only usefull to not drop connection
+    // Only useful to not drop connection
     _tcp_stream: TcpStream,
     session: Session,
 }
