@@ -97,3 +97,4 @@ std::fs::remove_dir_all("testreaddir").unwrap(); // If you want to remove dir an
 
 + implement swift as a new backend
 + refactor with more idiomatic Rust stuff
++ Check drop strategy for in memory fs

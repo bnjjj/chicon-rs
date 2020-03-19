@@ -22,3 +22,4 @@ chrono = { version = "0.4.7", features = ["serde"] }
 tokio = "0.1.22"
 env_logger = "0.6.2"
 failure = "0.1.5"
+openstack = { version = "0.3.1", path = "../rust-openstack" }

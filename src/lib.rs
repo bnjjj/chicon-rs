@@ -132,6 +132,7 @@ extern crate serde;
 extern crate tokio;
 #[macro_use]
 extern crate failure;
+extern crate openstack;
 
 mod error;
 mod mem;
@@ -139,7 +140,7 @@ mod os;
 mod s3;
 mod sftp;
 mod ssh;
-// mod swift;
+mod swift;
 
 use std::fs::Permissions;
 use std::io::{Read, Seek, Write};
@@ -202,4 +203,28 @@ pub enum FileType {
     Directory,
     File,
     Symlink,
+}
+
+/// Convert a pathname in String to FileType
+/// Do not use for symlink
+impl From<String> for FileType {
+    fn from(filename: String) -> Self {
+        if filename.ends_with('/') {
+            Self::Directory
+        } else {
+            Self::File
+        }
+    }
+}
+
+/// Convert a pathname in String to FileType
+/// Do not use for symlink
+impl From<&String> for FileType {
+    fn from(filename: &String) -> Self {
+        if filename.ends_with('/') {
+            Self::Directory
+        } else {
+            Self::File
+        }
+    }
 }
