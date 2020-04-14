@@ -2,23 +2,25 @@ use std::fs::{File, OpenOptions, Permissions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-use crate::{DirEntry, File as FsFile, FileSystem, FileType};
+use crate::{ChiconError, DirEntry, File as FsFile, FileSystem, FileType};
 
 /// Structure implementing `FileSystem` trait to store on a local filesystem
 #[derive(Default)]
 pub struct OsFileSystem;
+
 impl OsFileSystem {
     pub fn new() -> Self {
         OsFileSystem {}
     }
 }
+
 impl FileSystem for OsFileSystem {
-    type FSError = std::io::Error;
+    type FSError = ChiconError;
     type File = OsFile;
     type DirEntry = OsDirEntry;
 
     fn chmod<P: AsRef<Path>>(&self, path: P, perm: Permissions) -> Result<(), Self::FSError> {
-        std::fs::set_permissions(path, perm)
+        std::fs::set_permissions(path, perm).map_err(|e| e.into())
     }
 
     fn create_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError> {
@@ -26,11 +28,11 @@ impl FileSystem for OsFileSystem {
     }
 
     fn create_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
-        std::fs::create_dir(path)
+        std::fs::create_dir(path).map_err(|e| e.into())
     }
 
     fn create_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
-        std::fs::create_dir_all(path)
+        std::fs::create_dir_all(path).map_err(|e| e.into())
     }
 
     fn open_file<P: AsRef<Path>>(&self, path: P) -> Result<Self::File, Self::FSError> {
@@ -49,24 +51,25 @@ impl FileSystem for OsFileSystem {
     }
 
     fn remove_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
-        std::fs::remove_file(path)
+        std::fs::remove_file(path).map_err(|e| e.into())
     }
 
     fn remove_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
-        std::fs::remove_dir(path)
+        std::fs::remove_dir(path).map_err(|e| e.into())
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Self::FSError> {
-        std::fs::remove_dir_all(path)
+        std::fs::remove_dir_all(path).map_err(|e| e.into())
     }
 
     fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Result<(), Self::FSError> {
-        std::fs::rename(from, to)
+        std::fs::rename(from, to).map_err(|e| e.into())
     }
 }
 
 /// Structure implementing File trait to represent a file on a local filesystem
 pub struct OsFile(File);
+
 impl FsFile for OsFile {
     type FSError = std::io::Error;
 
@@ -80,6 +83,7 @@ impl Read for OsFile {
         self.0.read(buf)
     }
 }
+
 impl Write for OsFile {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
         self.0.write(buf)
@@ -88,11 +92,13 @@ impl Write for OsFile {
         self.0.flush()
     }
 }
+
 impl Seek for OsFile {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64, std::io::Error> {
         self.0.seek(pos)
     }
 }
+
 impl From<File> for OsFile {
     fn from(file: File) -> Self {
         OsFile(file)
@@ -101,8 +107,9 @@ impl From<File> for OsFile {
 
 /// Structure implementing `DirEntry` trait to represent an entry in a directory on a local filesystem
 pub struct OsDirEntry(std::fs::DirEntry);
+
 impl DirEntry for OsDirEntry {
-    type FSError = std::io::Error;
+    type FSError = ChiconError;
 
     fn path(&self) -> Result<PathBuf, Self::FSError> {
         Ok(self.0.path())
@@ -260,5 +267,12 @@ mod tests {
         );
 
         std::fs::remove_dir_all("testreaddirbis").unwrap();
+    }
+
+    #[test]
+    fn test_create_file_expects_error() {
+        let os_fs = OsFileSystem::new();
+        let err: Option<ChiconError> = os_fs.remove_dir("++non_existant+++").err();
+        assert_eq!(err.is_some(), true)
     }
 }
