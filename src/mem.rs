@@ -6,14 +6,15 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use crate::error::ChiconError;
 use crate::{DirEntry, File, FileSystem, FileType};
+use crate::error::ChiconError;
 
 /// Structure implementing `FileSystem` trait to store on an in memory filesystem
 #[derive(Default, Clone)]
 pub struct MemFileSystem {
     children: RefCell<HashMap<String, MemDirEntry>>,
 }
+
 impl FileSystem for MemFileSystem {
     type FSError = ChiconError;
     type File = MemFile;
@@ -216,7 +217,7 @@ impl MemFileSystem {
         let current_path = path_iter.next().ok_or(ChiconError::BadPath)?;
 
         let child = if let Some(child_entry) =
-            children.get_mut(&current_path.to_string_lossy().into_owned())
+        children.get_mut(&current_path.to_string_lossy().into_owned())
         {
             if path_iter.clone().peekable().peek().is_some() {
                 child_entry
@@ -259,7 +260,7 @@ impl MemFileSystem {
 
         let mut children = self.children.try_borrow_mut()?;
         let child = if let Some(child_entry) =
-            children.get_mut(&current_path.to_string_lossy().into_owned())
+        children.get_mut(&current_path.to_string_lossy().into_owned())
         {
             if path_iter.clone().peekable().peek().is_some() {
                 child_entry
@@ -315,6 +316,7 @@ struct MemFileInternal {
 /// Structure implementing File trait to represent a file on an in memory filesystem
 #[derive(Clone)]
 pub struct MemFile(Rc<RefCell<MemFileInternal>>);
+
 impl File for MemFile {
     type FSError = ChiconError;
 
@@ -325,7 +327,7 @@ impl File for MemFile {
 
 impl Read for MemFile {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        let mut cloned_content: Vec<u8>;
+        let cloned_content: Vec<u8>;
         {
             let content = &self
                 .0
@@ -360,6 +362,7 @@ impl Read for MemFile {
         Ok(nb)
     }
 }
+
 impl Write for MemFile {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
         self.0
@@ -386,6 +389,7 @@ impl Write for MemFile {
             .flush()
     }
 }
+
 impl Seek for MemFile {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64, std::io::Error> {
         let mut mem_file = self.0.try_borrow_mut().map_err(|_| {
@@ -401,15 +405,15 @@ impl Seek for MemFile {
         );
         match pos {
             SeekFrom::Current(nb)
-                if mem_file.offset as i64 + nb < mem_file.content.len() as i64 =>
-            {
-                let cursor: i64 = mem_file.offset as i64 + nb;
-                if cursor < 0 {
-                    return Err(err);
+            if mem_file.offset as i64 + nb < mem_file.content.len() as i64 =>
+                {
+                    let cursor: i64 = mem_file.offset as i64 + nb;
+                    if cursor < 0 {
+                        return Err(err);
+                    }
+                    mem_file.offset = cursor as u64;
+                    Ok(cursor as u64)
                 }
-                mem_file.offset = cursor as u64;
-                Ok(cursor as u64)
-            }
             SeekFrom::End(nb) if nb >= 0 => {
                 mem_file.offset = (mem_file.content.len() as u64) + nb as u64;
                 Ok(mem_file.offset)
@@ -434,6 +438,7 @@ pub enum MemDirEntry {
     File(MemFile),
     Directory(MemDirectory),
 }
+
 impl DirEntry for MemDirEntry {
     type FSError = ChiconError;
 
@@ -451,6 +456,7 @@ impl DirEntry for MemDirEntry {
         }
     }
 }
+
 impl MemDirEntry {
     fn get_from_relative_path(&self, path: PathBuf) -> Option<MemDirEntry> {
         let mut path_iter = path.iter();
@@ -511,9 +517,11 @@ struct MemDirectoryInternal {
     perm: Permissions,
     children: Option<HashMap<String, MemDirEntry>>,
 }
+
 /// Structure representing a directory on an in memory filesystem
 #[derive(Clone)]
 pub struct MemDirectory(Rc<RefCell<MemDirectoryInternal>>);
+
 impl MemDirectory {
     fn get_from_relative_path(&self, path: PathBuf) -> Option<MemDirEntry> {
         let mut path_iter = path.iter();
@@ -806,7 +814,7 @@ mod tests {
             PathBuf::from(String::from("share/testmemreaddir/myfile"))
                 == res.get(0).unwrap().path().unwrap()
                 || PathBuf::from(String::from("share/testmemreaddir/myotherfile"))
-                    == res.get(0).unwrap().path().unwrap()
+                == res.get(0).unwrap().path().unwrap()
         );
     }
 
@@ -828,7 +836,7 @@ mod tests {
             PathBuf::from(String::from("share/testmemreaddir/myfile"))
                 == res.get(0).unwrap().path().unwrap()
                 || PathBuf::from(String::from("share/testmemreaddir/myotherfile"))
-                    == res.get(0).unwrap().path().unwrap()
+                == res.get(0).unwrap().path().unwrap()
         );
     }
 
@@ -850,7 +858,7 @@ mod tests {
             PathBuf::from(String::from("share/testmemreaddir/myfile"))
                 == res.get(0).unwrap().path().unwrap()
                 || PathBuf::from(String::from("share/testmemreaddir/myotherfile"))
-                    == res.get(0).unwrap().path().unwrap()
+                == res.get(0).unwrap().path().unwrap()
         );
 
         let mut file = mem_fs
@@ -930,7 +938,7 @@ mod tests {
             PathBuf::from(String::from("share/testmemreaddir/myfile"))
                 == res.get(0).unwrap().path().unwrap()
                 || PathBuf::from(String::from("share/testmemreaddir/myotherfile"))
-                    == res.get(0).unwrap().path().unwrap()
+                == res.get(0).unwrap().path().unwrap()
         );
 
         let mut file = mem_fs
@@ -1028,5 +1036,4 @@ mod tests {
             .unwrap();
         assert!(mem_fs.remove_dir_all("share/testmemreaddirother").is_err());
     }
-
 }
