@@ -4,7 +4,7 @@
 [![Version](https://img.shields.io/crates/v/chicon.svg)](https://crates.io/crates/chicon)
 [![Documentation](https://docs.rs/chicon/badge.svg)](https://docs.rs/chicon)
 
-A file abstraction system for Rust. Chicon is a library intends to provide a simple, uniform and universal API interacting with any filesystem, as an abstraction layer providing traits, types and methods. The main `FileSystem` trait is based on the usage of [`std::fs::*`](https://doc.rust-lang.org/stable/std/fs/) in order to be transparent when you want to switch from a physical filesystem to a virtual one like S3, SFTP, SSH and in-memory. It is suitable for any situation when you need to store directories and files on different filesystems. Memory file system can be appropriate when you write your tests in order to have faster behavior than an IO filesystem.
+A file abstraction system for Rust.  Chicon is a library meant to provide a simple, uniform and universal API interacting with any filesystem. Chicon behaves as an abstraction layer providing traits, types and methods. The main `FileSystem` trait is based on the usage of [`std::fs::*`](https://doc.rust-lang.org/stable/std/fs/) in order to be transparent when switching from a physical filesystem to a virtual one like S3, SFTP, SSH or in-memory. Chicon is suitable for any situation where storing directories and files on different filesystems is needed. Memory file system can be appropriate to write tests in order to have a faster execution than with an IO filesystem.
 
 ## Examples
 
@@ -26,7 +26,7 @@ file.sync_all().unwrap();
 let mut content: String = String::new();
 file.read_to_string(&mut content).unwrap();
 assert_eq!(content, String::from("here is a test"));
-s3_fs.remove_file("test.test").unwrap(); // If you want to delete the file
+s3_fs.remove_file("test.test").unwrap(); // To delete the file
 ```
 
 ### Use SFTP as backend to create a file
@@ -88,10 +88,10 @@ assert_eq!(
     dir_entries.get(0).unwrap().file_type().unwrap(),
     FileType::Directory
 );
-std::fs::remove_dir_all("testreaddir").unwrap(); // If you want to remove dir and all entries inside
+std::fs::remove_dir_all("testreaddir").unwrap(); // To remove dir and all entries inside
 ```
 
-> If you need more examples, check-out all tests in the source code on GitHub
+> If you need more examples, checkout the tests in the source code on the GitHub repository.
 
 ## Roadmap
 
