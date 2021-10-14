@@ -97,3 +97,4 @@ std::fs::remove_dir_all("testreaddir").unwrap(); // To remove dir and all entrie
 
 + implement swift as a new backend
 + refactor with more idiomatic Rust stuff
++ add async support
