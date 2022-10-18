@@ -1,6 +1,6 @@
 [package]
 name = "chicon"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Benjamin Coenen <benjamin.coenen@hotmail.com>"]
 edition = "2018"
 description = "A file abstraction system for Rust"
@@ -11,8 +11,8 @@ license-file = "LICENSE"
 categories = ["filesystem", "development-tools", "api-bindings"]
 
 [dependencies]
-rusoto_s3 = "0.39.0"
-rusoto_core = "0.39.0"
+rusoto_s3 = "0.42.0"
+rusoto_core = "0.42.0"
 url = "1.7.2"
 ssh2 = "0.3.3"
 osauth = "0.2.4"
