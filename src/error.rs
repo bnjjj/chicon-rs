@@ -5,7 +5,7 @@ use rusoto_core::RusotoError;
 use rusoto_s3::{
     CopyObjectError, DeleteObjectError, DeleteObjectsError, GetObjectError, ListObjectsV2Error, PutObjectError,
 };
-use ssh2;
+
 
 macro_rules! from_error {
     ($type:ty, $target:ident, $targetvar:expr) => {

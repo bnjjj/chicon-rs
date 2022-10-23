@@ -102,11 +102,7 @@ impl MemFileSystem {
         let mut path_iter = path.iter();
         let current_path = path_iter.next()?;
         let child =
-            if let Some(child_entry) = children.get(&current_path.to_string_lossy().into_owned()) {
-                child_entry
-            } else {
-                return None;
-            };
+            children.get(&current_path.to_string_lossy().into_owned())?;
 
         child.get_from_relative_path(path_iter.collect())
     }
@@ -525,11 +521,7 @@ pub struct MemDirectory(Rc<RefCell<MemDirectoryInternal>>);
 impl MemDirectory {
     fn get_from_relative_path(&self, path: PathBuf) -> Option<MemDirEntry> {
         let mut path_iter = path.iter();
-        let current_path = if let Some(cur_path) = path_iter.next() {
-            cur_path
-        } else {
-            return None;
-        };
+        let current_path = path_iter.next()?;
         let mem_dir = self.0.try_borrow().ok()?;
         let children = if let Some(children_entry) = &mem_dir.children {
             children_entry
